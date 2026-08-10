@@ -22,7 +22,7 @@ hooks, and no prompt scanning.
 ## Installation
 
 ```
-/plugin marketplace add Lucklyric/tmux-agent
+/plugin marketplace add Lucklyric/super-tmux
 /plugin install tmux-core@super-tmux
 ```
 

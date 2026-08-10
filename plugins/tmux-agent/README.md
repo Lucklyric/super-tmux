@@ -31,7 +31,7 @@ codex plugin v3.11.0.
 ## Installation
 
 ```
-/plugin marketplace add Lucklyric/tmux-agent
+/plugin marketplace add Lucklyric/super-tmux
 /plugin install tmux-agent@super-tmux
 ```
 
