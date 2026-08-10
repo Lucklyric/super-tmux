@@ -1,6 +1,6 @@
 ---
 name: tmux
-description: This skill should be used for daily tmux usage — creating and organizing sessions, windows, and panes; building dev layouts (editor + server + logs splits, resizing, zoom); persistent sessions and attach/detach workflows; copy-mode, scrollback navigation, searching, and capturing output; history limits; window/pane naming hygiene; and the raw send-keys / capture-pane / pane-user-option primitives used to script tmux. Do NOT trigger for driving another interactive agent CLI (codex, claude, aider) as a co-worker — that is the tmux-agent skill — or when tmux is merely a discussion topic.
+description: This skill should be used for daily tmux usage — creating and organizing sessions, windows, and panes; building dev layouts (editor + server + logs splits, resizing, zoom); persistent sessions and attach/detach workflows; copy-mode, scrollback navigation, searching, and capturing output; history limits; window/pane naming hygiene; and the raw send-keys / capture-pane / pane-user-option primitives used to script tmux. Do NOT trigger for programmatically driving ANY interactive CLI as a co-worker — agent CLIs (codex, claude, aider), REPLs, or other TUIs, including their send-keys/capture-pane/idle-detection loops — that is the tmux-agent skill; nor when tmux is merely a discussion topic.
 ---
 
 # Tmux: Daily Fundamentals

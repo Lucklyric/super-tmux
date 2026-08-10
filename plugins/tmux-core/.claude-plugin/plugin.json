@@ -1,7 +1,7 @@
 {
   "name": "tmux-core",
   "description": "Daily tmux fundamentals and best practices: session/window/pane model, dev layouts, persistent sessions, attach/detach, copy-mode and scrollback, plus the generic send-keys/capture-pane primitives other plugins build on. Agent-free and useful standalone.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "0xasun"
   },

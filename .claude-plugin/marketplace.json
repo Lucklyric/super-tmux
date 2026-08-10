@@ -1,7 +1,8 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "super-tmux",
   "description": "Tmux fundamentals and agent-CLI orchestration for Claude Code: daily tmux workflows, plus driving agent CLIs (codex, claude) as visible pane co-workers with reuse, keep-shell, and multi-agent collaboration",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "owner": {
     "name": "0xasun"
   },

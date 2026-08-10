@@ -1,6 +1,6 @@
 ---
 name: tmux-agent
-description: This skill should be used when the agent needs to drive, observe, or manage ANOTHER interactive command-line program inside tmux — especially other agent CLIs such as codex, claude, gemini, or aider. Triggers on spawning or reusing a pane/window co-worker for a long-lived CLI, sending it prompts and reading its responses (prompt/wait/read verbs or send-keys/capture-pane), detecting when the driven CLI is idle/busy/blocked, binding one Claude session to its sub-processes, running several agent panes in parallel (multi-agent collaboration), serializing concurrent drivers, and lifecycle/cleanup of those panes. Do NOT trigger for plain one-shot shell commands that finish on their own, for daily tmux usage questions (sessions, layouts, copy-mode — the tmux-core plugin's tmux skill), or when the user is merely discussing tmux as a topic.
+description: This skill should be used when the agent needs to drive, observe, or manage ANOTHER interactive command-line program inside tmux — especially other agent CLIs such as codex, claude, gemini, or aider. Triggers on spawning or reusing a pane/window co-worker for a long-lived CLI, sending it prompts and reading its responses (prompt/wait/read verbs or send-keys/capture-pane), detecting when the driven CLI is idle/busy/blocked, binding one Claude session to its sub-processes, running several agent panes in parallel (multi-agent collaboration), serializing concurrent drivers, and lifecycle/cleanup of those panes. For codex-as-actor requests ("ask codex to X") the codex skill is the entry point — this skill is the generic engine behind it. Do NOT trigger for plain one-shot shell commands that finish on their own, for daily tmux usage questions (sessions, layouts, copy-mode — the tmux-core plugin's tmux skill), or when the user is merely discussing tmux as a topic.
 ---
 
 # Tmux-Agent: Driving Agent CLIs as Pane Co-Workers
@@ -58,13 +58,16 @@ Generic env knobs (kind wrappers map their legacy names onto these): `CC_AGENT_B
 
 ## The script surface
 
-Lifecycle + interaction, all with clean exit codes (`ENGINE="$CLAUDE_PLUGIN_ROOT/scripts/agent-tmux.sh"`):
+Lifecycle + interaction, all with clean exit codes:
 
 ```bash
+ENGINE="$CLAUDE_PLUGIN_ROOT/scripts/agent-tmux.sh"
+
 # Lifecycle: resolve/reuse THE co-worker pane (idempotent: reuse if alive,
 # relaunch in kept shell if exited, respawn if dead, split only if absent).
 $ENGINE --kind claude pane --cwd "$PWD"              # → pane id, e.g. %53
 $ENGINE --kind claude pane --topic tests --cwd "$PWD" # extra parallel worker
+$ENGINE --kind claude new tests --cwd "$PWD"          # separate WINDOW (explicit request only)
 $ENGINE --kind claude panes --json                    # this session's panes + states
 $ENGINE --kind claude bind --cwd "$PWD"               # fallback window when not inside tmux
 

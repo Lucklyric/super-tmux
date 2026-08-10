@@ -7,7 +7,7 @@ description: This skill should be used whenever the user names codex as the acto
 
 Use OpenAI's Codex CLI (GPT-5.6 series — default `gpt-5.6-sol`, `xhigh` reasoning) for complex coding, architecture, and review work that benefits from a frontier reasoning model. Pick the 5.6 model + effort by task (see "Model and reasoning effort"). Requires codex CLI **≥ 0.144.0** for the 5.6 series.
 
-**Default mode is tmux.** Codex runs in a long-lived attachable tmux pane/window — a co-worker at the user's side — so the user can watch, intervene, and iterate. The helper script handles lifecycle (pane / bind / spawn / list / kill) and Claude drives the interaction layer directly with `tmux send-keys` and `tmux capture-pane`. A `codex exec` escape hatch exists but is gated: use it only when the user explicitly asked for headless, or after confirming (see "Codex is a co-worker in a pane").
+**Default mode is tmux.** Codex runs in a long-lived attachable tmux pane/window — a co-worker at the user's side — so the user can watch, intervene, and iterate. The helper script handles the whole loop: lifecycle (`pane` / `panes` / `bind` / `new` / `ls` / `kill`) **and the driving verbs** (`prompt` / `wait` / `read --delta` / `cancel`) — send, settle-detection, and delta extraction are script commands with clean exit codes, not hand-rolled tmux loops. A `codex exec` escape hatch exists but is gated: use it only when the user explicitly asked for headless, or after confirming (see "Codex is a co-worker in a pane").
 
 **One codex pane in your current window by default.** When Claude is running inside tmux, codex runs as a PANE split into your CURRENT tmux window — right next to Claude — so you can watch progress live with NO separate attach. In the normal case there is one codex pane per Claude session, reused for every task (call `pane` first; it is idempotent). (A duplicate pane can occur if the Claude session id rolls — recover with `kill %id`, or `kill --mine` then re-resolve.) When Claude is NOT inside tmux, it falls back to a dedicated reused window `codex-<claude6>` in the `cc-codex` session (call `bind`). Only spawn an extra pane when the user explicitly asks for a parallel task (`pane --topic <slug>` — still in the current window; see "Detecting & orchestrating multiple codex panes"), and an extra window (`new`) only when the user explicitly asks for a separate window. The generic agentic-tmux concepts behind this (identity & naming patterns, send/capture/idle-detect, sync/locking, lifecycle) live in the **`tmux-agent` skill** (this plugin); this skill links to it and keeps only codex-specifics. Daily tmux fundamentals (session/window/pane model, layouts, copy-mode) live in the `tmux` skill of the **tmux-core** plugin, declared as a dependency so it auto-installs.
 
@@ -41,12 +41,12 @@ else
     # → fall back to a dedicated cc-codex window.
     TARGET="cc-codex:$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh bind --cwd "$PWD" | head -n1)"
 fi
-# Now drive "$TARGET" with the interaction recipes (send → detect-idle → extract-delta).
+# Now drive "$TARGET" with the verbs (prompt --wait → read --delta).
 ```
 
 Capture `pane`'s output to a variable first and check its real exit code (do **not** pipe straight into `head` — that masks the exit code, and without `pipefail` the `&&` would succeed with an empty `TARGET`). Exit 3 means "not inside tmux"; exit 4 means codex died on launch (after one auto-retry) — in either case the `bind` fallback (or a re-run, which auto-retries) is the recovery.
 
-`$TARGET` is target-agnostic — it is a pane id (e.g. `%53`) inside tmux, or `cc-codex:<window>` in the fallback — and **all the interaction recipes below drive `"$TARGET"`**. Both `pane` and `bind` are idempotent: they reuse the live codex if alive, relaunch codex inside the kept shell if it exited (see below), and respawn if dead — so follow-ups, continuations, and new sub-tasks all land in the same pane/window. You do **not** need `find` or a topic slug for the normal case. Pass `--full-auto` on the first `pane`/`bind` call for write mode (default is `--read-only`); the sandbox is fixed while codex runs (a relaunch after codex exited applies the newly requested sandbox).
+`$TARGET` is target-agnostic — it is a pane id (e.g. `%53`) inside tmux, or `cc-codex:<window>` in the fallback. The driving verbs default to this session's main pane, so inside tmux you rarely pass it; in the fallback (or for explicit addressing) pass `--target "$TARGET"`. Both `pane` and `bind` are idempotent: they reuse the live codex if alive, relaunch codex inside the kept shell if it exited (see below), and respawn if dead — so follow-ups, continuations, and new sub-tasks all land in the same pane/window. You do **not** need `find` or a topic slug for the normal case. Pass `--full-auto` on the first `pane`/`bind` call for write mode (default is `--read-only`); the sandbox is fixed while codex runs (a relaunch after codex exited applies the newly requested sandbox).
 
 > **When codex exits, the pane stays (keep-shell default).** Exiting codex (the user quits the TUI, or it crashes) does NOT close the pane: it drops into an interactive shell in the same pane — scrollback intact, usable manually (e.g. the user can run `codex resume --last` to continue the conversation by hand, or any other command). Typing `exit` in that shell closes the pane. `panes`/`ls` report such a target as state `shell`, and the next `pane`/`bind` call relaunches codex inside it (same pane, no new split). Set `CC_CODEX_KEEP_SHELL=0` for the legacy behavior (codex exit closes the pane per `CC_CODEX_REMAIN_ON_EXIT`).
 
@@ -95,20 +95,17 @@ fi   # nonzero exit: surface stderr; never drive an empty target
 
 All the default `pane` semantics apply per-topic: reuse-if-alive, relaunch-in-kept-shell if codex exited, relocate into the current window if it drifted to another one (`join-pane`, never duplicated), respawn-if-dead, width floor, liveness check with one auto-retry (exit 4), sandbox-mismatch warning. Plain `pane` is exactly `pane --topic main` (the primary pane; behavior unchanged). **Announce before spawning**, e.g. *"I'll open a second codex pane (topic: tests) in your current window."*
 
-### Address: one `$TARGET` per pane, one driver per pane
+### Address: one target per pane, one driver per pane
 
-Each pane is an independent `$TARGET`. Keep a PER-PANE baseline and a PER-PANE idle loop — never share `BASELINE`/`PREV` state across panes. One driver (this Claude) per pane; you may drive several panes concurrently:
+Each pane is addressed by its topic (`--topic <slug>`; omit for the main pane). The verbs keep a PER-PANE baseline automatically — each `prompt` records its own pane's anchor, so nothing is shared across panes. One driver (this Claude) per pane; you may drive several panes concurrently:
 
 ```bash
-# (both resolved with the capture-and-check pattern above; shown short here)
-MAIN=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --cwd "$PWD" | head -n1)
-TESTS=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --topic tests --cwd "$PWD" | head -n1)
+CODEX="$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh"
+$CODEX prompt -- "task A"                        # main pane
+$CODEX prompt --topic tests -- "task B"          # extra pane, own baseline
 
-BASE_MAIN=$(tmux capture-pane -t "$MAIN" -p -S -200)
-BASE_TESTS=$(tmux capture-pane -t "$TESTS" -p -S -200)
-# Send task A to $MAIN and task B to $TESTS (short-inline-prompt / tmp-file-prompt),
-# then run detect-idle against each pane with its own baseline, and extract each
-# delta per pane (line-count tail against BASE_MAIN / BASE_TESTS respectively).
+$CODEX wait               && $CODEX read --delta                # A settled → A's delta
+$CODEX wait --topic tests && $CODEX read --delta --topic tests  # B independently
 ```
 
 ### Separate window: `new <topic>` (explicit request only)
@@ -136,7 +133,7 @@ Extra-pane titles become `codex-<topic>-<claude6>` (the primary pane's title sta
 
 ## Lifecycle one-liners (helper script)
 
-The helper script at `$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh` handles lifecycle only. It does NOT manage interaction.
+The helper script at `$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh` handles lifecycle (this section) and interaction (the driving verbs, next section).
 
 ```bash
 # DEFAULT entry point (inside tmux): get/create THE codex pane in the CURRENT
@@ -204,97 +201,64 @@ $CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh kill --mine
 $CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh exec "<prompt>"
 ```
 
-The script keeps `send` and `capture` as recognized keywords ONLY to print a migration error pointing at the recipes below. **Drive interaction yourself via raw tmux commands.**
+The script keeps `send` and `capture` as recognized keywords ONLY to print a migration error pointing at the driving verbs below. **Drive interaction via the verbs** — raw `tmux send-keys`/`capture-pane` remains for calibration, debugging, and unexpected TUI states only.
 
-## Interaction one-liners
+## Driving verbs (the interaction surface)
 
-Each line is the short form. Full recipes with calibration notes live in `references/tmux-mode.md`.
+The whole loop — baseline, atomic send, two-phase settle detection, delta extraction — is script commands. Calibration (the `gpt-5\.[0-9].*·` idle regex, bottom-of-pane anchoring, deadlines) lives inside the verbs via the codex profile; you don't hand-roll it.
 
 ```bash
-# Wait for codex to be input-ready (status line appears). Use after `new`.
-# Anchor IDLE_REGEX to the ` · /path` status line, not just the model name —
-# the model name can appear in response text. $TARGET is the pane id or
-# cc-codex:window from the resolve-target snippet above. Bound the wait so a
-# dead/empty target can't spin forever (mirrors the detect-idle deadline).
-# Model-agnostic: matches any gpt-5.x slug (sol/terra/luna/5.5) + status separator.
-IDLE_REGEX='gpt-5\.[0-9].*·'
-RDY_DEADLINE=$(( $(date +%s) + 30 ))
-until tmux capture-pane -t "$TARGET" -p -S -200 | tail -3 | grep -qE "$IDLE_REGEX"; do
-    (( $(date +%s) > RDY_DEADLINE )) && { echo "codex not ready after 30s (dead pane?)"; break; }
-    sleep 0.5
-done
+CODEX="$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh"
 
-# Take a baseline BEFORE sending; you'll use it both as the activity-wait
-# anchor and for delta extraction.
-BASELINE=$(tmux capture-pane -t "$TARGET" -p -S -200)
+# Send a prompt and block until the turn settles (the default move).
+# Atomic send: literal keys, short pause, Enter as its own event. Records the
+# baseline that wait/read anchor to. Long or multi-line text goes via a tmp
+# file automatically ("Read @file ..."); or pass a file you wrote with the
+# Write tool explicitly:
+$CODEX prompt --wait -- "<prompt>"
+$CODEX prompt --wait --file "$PROMPT_FILE"
 
-# Send a short prompt (≤500 chars, single line).
-tmux send-keys -t "$TARGET" -l -- "<prompt>"
-sleep 0.3
-tmux send-keys -t "$TARGET" Enter
+# Split form — send now, settle later (e.g. while driving another pane):
+$CODEX prompt -- "<prompt>"
+$CODEX wait --timeout 900        # xhigh can think for minutes; be generous
 
-# Send a long / multi-line / code-block prompt: use the Write tool to drop
-# the prompt body to a tmp file, then point codex at it. Avoids shell
-# quoting and heredoc-delimiter collisions.
-#   1. Write tool → $PROMPT_FILE  (e.g. mktemp -t cc-codex-prompt.XXXX.md path)
-#   2. tmux send-keys -t "$TARGET" -l -- "Read @$PROMPT_FILE and follow its instructions."
-#   3. sleep 0.3 && tmux send-keys -t "$TARGET" Enter
+# wait exit codes — handle each distinctly:
+#   0 idle (turn finished)      5 timeout (still running — wait again or read)
+#   6 no target                 8 stalled (send never started a turn — retry prompt)
+#   9 codex exited (pane kept at shell — next `pane` relaunches it)
+# Standalone `wait` = "is it idle right now?" (also the readiness check after `new`).
 
-# Two-phase recheck: (a) wait for pane to differ from BASELINE (activity
-# started), (b) then wait for pane to stop changing AND show status line.
-# This is the recheck strategy — Claude must actively poll; there's no
-# auto-notification when codex finishes.
-ACTIVITY_DEADLINE=$(( $(date +%s) + 30 ))
-while (( $(date +%s) < ACTIVITY_DEADLINE )); do
-    [[ "$(tmux capture-pane -t "$TARGET" -p -S -200)" != "$BASELINE" ]] && break
-    sleep 0.5
-done
-PREV=""; STABLE=0; DEADLINE=$(( $(date +%s) + 600 ))
-while (( $(date +%s) < DEADLINE )); do
-    BUF=$(tmux capture-pane -t "$TARGET" -p -S -200)
-    # Match IDLE_REGEX on the bottom of the pane only (last ~3 lines) so a
-    # response echoing the status line can't fire a false idle.
-    if [[ "$BUF" == "$PREV" ]] && printf '%s\n' "$BUF" | tail -3 | grep -qE "$IDLE_REGEX"; then
-        STABLE=$(( STABLE + 1 )); (( STABLE >= 2 )) && break
-    else STABLE=0; fi
-    PREV="$BUF"; sleep 0.5
-done
+# Read ONLY what codex emitted since the last prompt:
+$CODEX read --delta
+$CODEX read --lines 1000         # more scrollback for a long response
 
-# Read the delta (everything codex emitted since BASELINE). Preferred: line-count
-# tail — robust on redraw-heavy TUIs.
-BEFORE_LINES=$(printf '%s\n' "$BASELINE" | wc -l)
-AFTER=$(tmux capture-pane -t "$TARGET" -p -S -200)
-AFTER_LINES=$(printf '%s\n' "$AFTER" | wc -l)
-(( AFTER_LINES > BEFORE_LINES )) && printf '%s\n' "$AFTER" | tail -n "$(( AFTER_LINES - BEFORE_LINES ))"
-# Alternative (noisy on redraw-heavy TUIs — spinners/status redraws):
-#   diff <(printf '%s\n' "$BASELINE") <(printf '%s\n' "$AFTER") | grep '^>' | sed 's/^> //'
+# Cancel an in-flight turn (user said "stop / ask it X instead"):
+$CODEX cancel && $CODEX wait     # Escape, then settle before the next prompt
 
-# Capture more scrollback when the response is long (>200 lines).
-tmux capture-pane -t "$TARGET" -p -S -1000
-
-# Cancel an in-flight generation (e.g., user said "stop, ask it X instead").
-tmux send-keys -t "$TARGET" Escape       # codex TUI binds Esc to cancel
-# Then re-run detect-idle and send the new prompt.
-
-# Handle a hooks-review prompt (first-ever codex run, one-time).
-tmux send-keys -t "$TARGET" "2" Enter
+# Targeting: default = this session's main pane. --topic <slug> = that extra
+# pane. --target "$TARGET" = explicit pane id / cc-codex:window (fallback mode).
 ```
 
-See `references/tmux-mode.md` for the codex-specific calibration, the pane-mode default, and the dedicated-window fallback. The full generic recipe catalog (activity-wait loop, stability check, delta computation, copy-mode navigation) lives in the `tmux-agent` skill's `references/interaction-recipes.md`.
+**Expecting a long or structured deliverable** (review, report, plan)? Use the file handoff: put an output path in the prompt itself — *"write the full report to `/tmp/codex-out.md`, reply DONE"* — then `wait` and Read the file. Lossless; no scrollback/redraw damage (`tmux-agent` skill § Adaptive I/O).
 
-## Choosing the right recipe
+**First-ever codex run only:** a "Hooks need review" gate appears before codex accepts work — dismiss with raw keys: `tmux send-keys -t "$TARGET" "2" Enter` ("Trust all and continue"). Other unexpected TUI prompts (approvals, auth): `read` the pane and see `handle-interruption` in `references/tmux-mode.md`.
 
-| Situation | Recipe |
+See `references/tmux-mode.md` for codex-specific calibration and the raw recipe forms behind the verbs; the generic rationale (why two-phase, delta semantics, copy-mode) is the `tmux-agent` skill's `references/interaction-recipes.md`.
+
+## Choosing the right move
+
+| Situation | Move |
 |---|---|
-| Prompt < ~500 chars, single line | `short-inline-prompt` |
-| Multi-line prompt, code blocks, > ~1KB | `tmp-file-prompt` |
-| Need to know "is codex done" | `detect-idle` |
-| Reading the latest response | `extract-delta` |
-| Response > ~200 lines | `incremental-capture` |
-| Response > tmux `history-limit` (~2000 lines) | `copy-mode-navigation` (rare) |
-| User says "stop / cancel / never mind" mid-response | `cancel-in-flight` |
-| Codex shows a non-response prompt | `handle-interruption` |
-| Resuming after the session id rolled or windows were killed | `reuse-existing-window` |
+| Any prompt, any size | `prompt --wait` (tmp-file handoff is automatic for long/multi-line) |
+| Send now, collect later / drive panes in parallel | `prompt`, then `wait` (+ `--topic` per pane) |
+| Need to know "is codex done" | `wait` — 0 idle / 5 timeout / 8 stalled / 9 exited |
+| Reading the latest response | `read --delta` |
+| Response > ~200 lines | `read --lines 1000` |
+| Structured deliverable expected (review/report/plan) | File handoff: output path in the prompt, `wait`, Read the file |
+| Response > tmux `history-limit` (~2000 lines) | `copy-mode-navigation` (`tmux-agent` skill; rare — prefer file handoff up front) |
+| User says "stop / cancel / never mind" mid-response | `cancel`, then `wait` |
+| Codex shows a non-response prompt (hooks/approval/auth) | `read`, then `handle-interruption` (raw keys; `references/tmux-mode.md`) |
+| Resuming after the session id rolled or windows were killed | `reuse-existing-window` (`references/tmux-mode.md`) |
 
 ## Choosing the right window — mandatory pre-spawn workflow
 
@@ -444,9 +408,9 @@ The helper script fails loudly (non-zero exit + stderr) for lifecycle errors. Wh
 
 - **Codex exited immediately at launch** — `pane`/`bind` exit **4** (after one auto-retry) and print codex's last output on stderr. Surface that output; re-run (auto-retries once) or fall back to `bind`. A `dead` state in `ls --mine` / `find` is the steady-state version of the same signal (codex's process is gone). Offer to respawn (resolve the target again) or salvage context first (see `reuse-existing-window`).
 - Window/pane-not-found errors from `ls`, `kill`, `attach`, `rename` — surface the message.
-- v3.1.0 migration errors from `send`/`capture` — exit 64. Switch to the skill recipes.
+- v3.1.0 migration errors from `send`/`capture` — exit 64. Use the driving verbs instead.
 
-Interaction errors (codex hung, regex doesn't match, unexpected TUI prompt) are now Claude's responsibility to detect from `capture-pane` output and either recover (see the `handle-interruption` recipe) or escalate to the user.
+Interaction failures mostly surface as `wait` exit codes: 5 = still running (wait longer, or `read` to peek — an approval/hooks prompt also looks like this, so check the pane), 8 = stalled (the send never started a turn — re-`prompt`), 9 = codex exited (kept shell — `pane` relaunches). Unexpected TUI prompts still need a `read` + the `handle-interruption` recipe, or escalate to the user.
 
 ## Reference index
 
@@ -454,7 +418,7 @@ Interaction errors (codex hung, regex doesn't match, unexpected TUI prompt) are 
 - The **`tmux-agent` skill** is the canonical home for generic agentic-tmux concepts and the full recipe catalog — identity & naming patterns, kinds & profiles, send/capture/idle-detect (incl. why two-phase), sync/locking, scrollback semantics, and lifecycle/cleanup. This skill links to it for background; see the **tmux-agent skill's own** `references/interaction-recipes.md`, `references/model-and-identity.md`, and `references/sync-and-lifecycle.md` (in `skills/tmux-agent/references/`, not this skill's references/). Read it when you need the *why* behind a recipe. Daily tmux fundamentals (session/window/pane model, layouts, copy-mode) live in the `tmux` skill of the **tmux-core** plugin.
 
 **Canonical (codex-specific tmux workflow):**
-- `references/tmux-mode.md` — **canonical for codex** — codex-specific calibration (model-agnostic `gpt-5\.[0-9].*·` `IDLE_REGEX`), the `pane` (default) / `panes` (detection) / `bind` (fallback) workflow, multi-pane topics, `"$TARGET"`-driven recipes, hooks-review handling, sandbox flags. Generic theory is delegated to the `tmux-agent` skill.
+- `references/tmux-mode.md` — **canonical for codex** — codex-specific calibration (model-agnostic `gpt-5\.[0-9].*·` `IDLE_REGEX`), the `pane` (default) / `panes` (detection) / `bind` (fallback) workflow, multi-pane topics, the raw recipe forms behind the `prompt`/`wait`/`read`/`cancel` verbs (calibration + debugging), hooks-review handling, sandbox flags. Generic theory is delegated to the `tmux-agent` skill.
 - `references/cli-features.md` — CLI flag table, interactive-vs-exec differences, `codex review` and `codex apply`.
 - `references/codex-config.md` — every `-c` key with type and default.
 - `references/codex-help.md` — raw `--help` output.

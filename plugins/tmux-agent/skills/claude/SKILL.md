@@ -1,6 +1,6 @@
 ---
 name: claude
-description: This skill should be used when the user asks to spawn, drive, or collaborate with a Claude Code CLI instance as a tmux pane co-worker — "spawn a claude pane", "another claude for X", "a claude worker/instance beside you", "drive claude in a pane", or pairing a claude implementer with a codex reviewer. Do NOT trigger when "claude" refers to the current session itself, to Claude the model/product as a discussion topic, or to ordinary requests addressed to the current assistant.
+description: This skill should be used when the user asks to spawn, drive, or collaborate with a Claude Code CLI instance as a tmux pane co-worker — "spawn a claude pane", "another claude for X", "a second claude", "a claude worker/instance beside you", "drive claude in a pane", "have claude do/review X in a/its pane", or pairing a claude implementer with a codex reviewer. Do NOT trigger when "claude" refers to the current session itself, to Claude the model/product as a discussion topic, or to ordinary requests addressed to the current assistant.
 ---
 
 # Claude: Claude Code CLI as a Pane Co-Worker
@@ -42,7 +42,7 @@ $ENGINE --kind claude read --delta
 - **A blocked turn looks busy.** An approval or trust prompt keeps `esc to interrupt`
   off-screen but the turn unfinished — if `wait` times out (exit 5), `read` the pane
   and check for a pending question before assuming a hang (`handle-interruption`
-  recipe).
+  recipe in the `tmux-agent` skill's `references/interaction-recipes.md`).
 - **Don't confuse the co-worker with yourself.** All isolation rules apply: the
   co-worker pane carries this session's marker; never drive a claude pane you did not
   create.
