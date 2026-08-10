@@ -1,4 +1,4 @@
-# Tmux Plugin (L1 — daily tmux)
+# Tmux-Core Plugin (L1 — daily tmux)
 
 Daily tmux fundamentals and best practices for Claude Code, agent-free:
 
@@ -16,15 +16,14 @@ hooks, and no prompt scanning.
 
 ## Status
 
-Pre-release scaffold — the skill content lands with the migration from
-[cc-dev-tools](https://github.com/Lucklyric/cc-dev-tools) (see the repo
-[ARCHITECTURE.md](../../ARCHITECTURE.md)).
+1.0.0 — the `tmux` skill ships daily fundamentals plus the raw scripting primitives
+(see the repo [ARCHITECTURE.md](../../ARCHITECTURE.md)).
 
-## Installation (once released)
+## Installation
 
 ```
 /plugin marketplace add Lucklyric/tmux-agent
-/plugin install tmux@tmux-agent
+/plugin install tmux-core@super-tmux
 ```
 
 ## License

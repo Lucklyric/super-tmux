@@ -1,12 +1,13 @@
 {
-  "name": "tmux",
+  "name": "tmux-core",
   "description": "Daily tmux fundamentals and best practices: session/window/pane model, dev layouts, persistent sessions, attach/detach, copy-mode and scrollback, plus the generic send-keys/capture-pane primitives other plugins build on. Agent-free and useful standalone.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": {
     "name": "0xasun"
   },
   "repository": "https://github.com/Lucklyric/tmux-agent",
-  "homepage": "https://github.com/Lucklyric/tmux-agent/tree/main/plugins/tmux",
+  "homepage": "https://github.com/Lucklyric/tmux-agent/tree/main/plugins/tmux-core",
   "keywords": ["tmux", "terminal", "sessions", "panes", "layouts", "productivity"],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "skills": ["./skills/tmux"]
 }

@@ -17,21 +17,22 @@ pane co-workers** beside Claude Code:
 - **Deterministic triggering**: a UserPromptSubmit hook nudges the right
   skill when a prompt names an agent.
 
-Depends on the `tmux` plugin (auto-installed as a dependency).
+Depends on the `tmux-core` plugin (auto-installed as a dependency).
 
 See the repo [ARCHITECTURE.md](../../ARCHITECTURE.md) for the full design.
 
 ## Status
 
-Pre-release scaffold — the engine, profiles, verbs, and tests are built and
-soaking as [cc-dev-tools](https://github.com/Lucklyric/cc-dev-tools)' codex
-plugin v3.11.0; they migrate here at cutover (1.0.0).
+1.0.0 — the engine (`agent-tmux.sh`), kind profiles (codex, claude), driving verbs,
+skill-nudge hook, skills (`tmux-agent`, `codex`, `claude`), and the full bats test
+suite are migrated from [cc-dev-tools](https://github.com/Lucklyric/cc-dev-tools)'
+codex plugin v3.11.0.
 
-## Installation (once released)
+## Installation
 
 ```
 /plugin marketplace add Lucklyric/tmux-agent
-/plugin install tmux-agent@tmux-agent
+/plugin install tmux-agent@super-tmux
 ```
 
 ## License

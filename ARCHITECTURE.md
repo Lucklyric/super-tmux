@@ -14,7 +14,7 @@ documentation.
 │      kinds & profiles · pane co-workers · keep-shell ·      │
 │      driving verbs · routing judgment · collaboration       │
 ├─────────────────────────────────────────────────────────────┤
-│  L1  tmux                     plugins/tmux/                 │
+│  L1  tmux-core                plugins/tmux-core/            │
 │      daily tmux: sessions/windows/panes, layouts,           │
 │      persistence, copy-mode + the raw primitives            │
 └─────────────────────────────────────────────────────────────┘
@@ -119,8 +119,8 @@ designed as its own increment.
 
 ## Status
 
-Pre-release. The engine, profiles, driving verbs, and tests are built and
-soaking inside the [cc-dev-tools](https://github.com/Lucklyric/cc-dev-tools)
-marketplace's codex plugin (v3.11.0); they migrate here — along with the
-skills that document them — once the soak proves the golden flow unchanged.
-Both plugins reach 1.0.0 at that cutover.
+1.0.0 — the engine, profiles, driving verbs, skills, hook, and the full test
+suite are migrated here from the
+[cc-dev-tools](https://github.com/Lucklyric/cc-dev-tools) marketplace's codex
+plugin (v3.11.0), preserving the parity contract (spec 016). cc-dev-tools
+retires its `codex` and `tmux` plugins at the corresponding cutover release.

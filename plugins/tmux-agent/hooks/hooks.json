@@ -1,0 +1,17 @@
+{
+  "description": "Deterministic skill-load nudge: when a user prompt names a supported agent CLI (codex, or claude in co-worker phrasing), remind Claude to invoke the matching tmux-agent skill before driving that CLI.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/skill-nudge.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

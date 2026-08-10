@@ -1,20 +1,20 @@
 {
-  "name": "tmux-agent",
+  "name": "super-tmux",
   "description": "Tmux fundamentals and agent-CLI orchestration for Claude Code: daily tmux workflows, plus driving agent CLIs (codex, claude) as visible pane co-workers with reuse, keep-shell, and multi-agent collaboration",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "owner": {
     "name": "0xasun"
   },
   "plugins": [
     {
-      "name": "tmux",
-      "source": "./plugins/tmux",
+      "name": "tmux-core",
+      "source": "./plugins/tmux-core",
       "description": "Daily tmux fundamentals and best practices: session/window/pane model, dev layouts, persistent sessions, attach/detach, copy-mode and scrollback, plus the send-keys/capture-pane primitives the tmux-agent plugin builds on. Agent-free and useful standalone."
     },
     {
       "name": "tmux-agent",
       "source": "./plugins/tmux-agent",
-      "description": "Drive agent CLIs (codex, claude, or any interactive CLI) as visible tmux pane co-workers: reuse-by-default routing, keep-shell panes, named parallel workers, idle/blocked detection, and per-agent calibration profiles with a generic fallback for unknown CLIs. Depends on the tmux plugin."
+      "description": "Drive agent CLIs (codex, claude, or any interactive CLI) as visible tmux pane co-workers: reuse-by-default routing, keep-shell panes, named parallel workers, idle/blocked detection, and per-agent calibration profiles with a generic fallback for unknown CLIs. Depends on the tmux-core plugin."
     }
   ]
 }

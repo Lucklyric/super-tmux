@@ -1,13 +1,14 @@
 {
   "name": "tmux-agent",
   "description": "Drive agent CLIs as visible tmux pane co-workers: reuse-by-default routing, keep-shell panes, named parallel workers, idle/blocked detection, per-agent calibration profiles (codex, claude) and a generic fallback for unknown CLIs.",
-  "version": "0.1.0",
-  "dependencies": ["tmux"],
+  "version": "1.0.0",
+  "dependencies": ["tmux-core"],
   "author": {
     "name": "0xasun"
   },
   "repository": "https://github.com/Lucklyric/tmux-agent",
   "homepage": "https://github.com/Lucklyric/tmux-agent/tree/main/plugins/tmux-agent",
-  "keywords": ["tmux", "orchestration", "agent-cli", "codex", "co-worker", "multi-agent", "automation"],
-  "license": "Apache-2.0"
+  "keywords": ["tmux", "orchestration", "agent-cli", "codex", "claude", "co-worker", "multi-agent", "automation"],
+  "license": "Apache-2.0",
+  "skills": ["./skills/tmux-agent", "./skills/codex", "./skills/claude"]
 }
