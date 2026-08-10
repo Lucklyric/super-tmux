@@ -34,6 +34,14 @@ plugins/tmux/                        layer 1 — tmux basics
 plugins/tmux-agent/                  layer 2+3 — orchestration + per-agent skills
 ```
 
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — the layered design: co-worker model,
+  keep-shell lifecycle, driving verbs, kinds/profiles, design principles.
+- [plugins/tmux/README.md](plugins/tmux/README.md) — the daily-tmux layer.
+- [plugins/tmux-agent/README.md](plugins/tmux-agent/README.md) — the
+  orchestration layer.
+
 ## License
 
 Apache-2.0
