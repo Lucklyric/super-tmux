@@ -16,6 +16,13 @@ while IFS= read -r line; do
         echo "exiting"
         exit 0
     fi
+    if [[ "$line" == "/sigint" ]]; then
+        # Simulate a Ctrl-C quit: SIGINT is delivered to the WHOLE foreground
+        # process group (this mock AND the keep-shell wrapper sh), exactly like
+        # a real TUI quit re-raising the signal.
+        kill -INT 0
+        exit 130
+    fi
     echo "[mock-response] you said: $line"
     printf "▌ \n"
     echo "  gpt-5.6-sol xhigh · /mock-cwd"

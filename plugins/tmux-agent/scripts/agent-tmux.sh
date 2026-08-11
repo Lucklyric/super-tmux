@@ -184,6 +184,13 @@ agent_running_under() {
 # wrapped so that when it exits — cleanly or crashed — the pane prints a hint
 # and drops into an interactive shell instead of closing. CC_AGENT_KEEP_SHELL=0
 # restores the legacy direct launch.
+#
+# The wrapper traps INT/QUIT with a no-op HANDLER (not an ignore): a Ctrl-C
+# quit delivers SIGINT to the whole foreground process group — the agent AND
+# this wrapper sh — and an unprotected wrapper dies before the hint/exec
+# epilogue runs, leaving a dead pane instead of the kept shell. A handler
+# (unlike '') is reset to default in children at exec, so the agent's own
+# Ctrl-C behavior is unchanged.
 compose_launch_cmd() {
     local launch
     launch="$(printf '%q ' "$@")"
@@ -194,7 +201,7 @@ compose_launch_cmd() {
     fi
     local sh_q
     sh_q="$(printf '%q' "$EXIT_SHELL")"
-    printf '%s' "$launch; printf '\\n[$KIND exited (status %s) -- pane kept for manual use: $RESUME_CMD continues the conversation; exit closes the pane]\\n' \"\$?\"; exec $sh_q -l"
+    printf '%s' "trap ':' INT QUIT; $launch; printf '\\n[$KIND exited (status %s) -- pane kept for manual use: $RESUME_CMD continues the conversation; exit closes the pane]\\n' \"\$?\"; exec $sh_q -l"
 }
 
 # Build the agent launch argv for a fresh start. Delegates flag composition to

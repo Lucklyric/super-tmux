@@ -119,6 +119,22 @@ teardown() {
     [[ "$output" == *"$first"$'\t'"main"$'\t'"shell"* ]]
 }
 
+@test "pane: Ctrl-C quit (SIGINT to the process group) still drops into the kept shell" {
+    run "$SCRIPT" pane --cwd /tmp
+    [ "$status" -eq 0 ]
+    local first="${lines[0]}"
+    # /sigint makes the mock send SIGINT to the whole foreground process group
+    # (like a real Ctrl-C quit). The wrapper's no-op INT trap must survive it
+    # and still drop the pane into the kept shell — NOT die as a dead pane.
+    tmux send-keys -t "$first" "/sigint" Enter
+    sleep 1.0
+    tmux list-panes -a -F '#{pane_id}' | grep -Fxq "$first"
+    [ "$(tmux display-message -p -t "$first" '#{pane_dead}')" = "0" ]
+    run "$SCRIPT" panes
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$first"$'\t'"main"$'\t'"shell"* ]]
+}
+
 @test "pane: re-resolving after codex exit relaunches codex in the SAME pane" {
     run "$SCRIPT" pane --cwd /tmp
     [ "$status" -eq 0 ]
