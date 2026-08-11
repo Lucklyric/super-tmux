@@ -321,6 +321,35 @@ Most common cause is a one-time interruption (hooks-review, approval prompt). `t
 
 Recovery: re-run the resolve-target snippet — `pane`/`bind` auto-retries once on the respawn — or fall back to `bind` (which the snippet does automatically when `pane` exits 4). This is usually a transient codex startup hiccup (e.g. `$CODEX_HOME` / MCP init), so a re-run typically succeeds. If it keeps dying, read codex's stderr output for the real cause (auth, bad config, MCP server failing to start).
 
+### Escape-sequence garbage appears in CLAUDE's own input box after a spawn
+
+Symptom: right after `pane` splits a codex pane, Claude's own composer fills with literal
+text like `[?997;1n[I[<35;105;48M<35;90;47M…` and typing appears dead.
+
+**Not a codex or plugin fault** — verify before chasing it:
+
+```bash
+tmux display -p -t "$TARGET"     '#{alternate_on} #{mouse_any_flag} #{mouse_all_flag}'  # codex pane
+tmux display -p -t "$CC_CODEX_REF_PANE" '#{alternate_on} #{mouse_any_flag} #{mouse_all_flag}'  # Claude pane
+```
+
+Codex reports `0 0 0` (it requests neither the alternate screen nor mouse tracking); the
+Claude pane reports `1 1 1`. Those sequences are Claude Code's *own* terminal traffic —
+`[?997;1n` is the terminal's answer to a dark/light-theme query, `[I` a focus-in event,
+`[<35;…M` SGR mouse-**motion** reports (mode 1003+1006, which every Claude Code pane
+enables). They are normally consumed by Claude's TUI, not displayed.
+
+Cause: the split **resizes Claude's pane** (SIGWINCH → full redraw), and an event burst
+arriving mid-redraw can get parsed as literal text. Any resize can do it (dragging a
+divider, another split); a codex spawn is just the common trigger. The engine never sends
+keystrokes to the reference pane — every `send-keys` targets the agent pane.
+
+Recovery, cheapest first: `Esc` / `Ctrl-U` to clear the composer → `Ctrl-L` (or
+`tmux refresh-client`) to force a redraw → detach/reattach the client
+(`prefix d`, `tmux attach -t <session>`), which resets client-level terminal state. It
+usually self-clears. To avoid the resize entirely for a session, put codex in its own
+window (`new <topic>`) instead of a pane.
+
 ### `detect-idle` returns immediately (false positive)
 
 The status line is already in `BASELINE` and codex hasn't started responding. Ensure Phase 0/1 (the activity-wait pre-step) is present. Generic explanation: `tmux-agent` skill § detect-idle.
