@@ -11,18 +11,25 @@ When Claude is running inside tmux, the default is a codex **pane** split into t
 Resolve THE codex target with this snippet (the canonical opening of every codex interaction). `$TARGET` is a pane id (e.g. `%53`) inside tmux, or `cc-codex:<window>` in the fallback:
 
 ```bash
-# Resolve THE codex target. Default: a pane in the current window.
-if [[ -n "${TMUX:-}" ]] && _out=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --cwd "$PWD"); then
-    TARGET=$(printf '%s\n' "$_out" | head -n1)   # pane id, e.g. %53
-else
-    # pane returned nonzero (exit 3 = not in tmux; exit 4 = codex died on launch)
-    # → fall back to a dedicated cc-codex window.
-    TARGET="cc-codex:$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh bind --cwd "$PWD" | head -n1)"
-fi
+# Helper path. Copy the literal CODEX= line from SKILL.md ("Default workflow"):
+# the Skill tool substitutes the placeholder there; this reference file is read
+# raw, so the line below is NOT substituted here. Re-state it in every Bash call.
+CODEX="${CLAUDE_PLUGIN_ROOT}/scripts/codex-tmux.sh"   # ← literal absolute path in SKILL.md
+
+# Resolve THE codex target. Default: a pane in the current window. bind (a
+# cc-codex window) is ONLY for exit 3 (not inside tmux) and exit 4 (codex died
+# at launch, after one auto-retry). Anything else — 127 wrong path, 2 bad flag —
+# means STOP and surface it; never fall through to bind.
+if [[ -n "${TMUX:-}" ]]; then _out=$("$CODEX" pane --cwd "$PWD"); _rc=$?; else _rc=3; fi
+case $_rc in
+    0)   TARGET=$(printf '%s\n' "$_out" | head -n1) ;;                  # pane id, e.g. %53
+    3|4) TARGET="cc-codex:$("$CODEX" bind --cwd "$PWD" | head -n1)" ;;  # fallback window
+    *)   unset TARGET; echo "codex-tmux.sh pane failed (exit $_rc; 127 = wrong helper path → re-invoke the tmux-agent:codex skill) — NOT falling back to bind" >&2 ;;
+esac
 # Now drive "$TARGET" with the verbs (prompt --wait → read --delta).
 ```
 
-Capture `pane`'s output and check its real exit code before `head` — piping straight into `head` masks the exit code, and without `pipefail` the `&&` would succeed with an empty `TARGET` on a nonzero `pane`. Exit 3 = not inside tmux; exit 4 = codex died on launch (after one auto-retry, with codex's last output on stderr). Both fall through to the `bind` fallback; a plain re-run also recovers exit 4 (`pane` auto-retries once).
+Capture `pane`'s output and branch on its real exit code before `head` — piping straight into `head` masks the exit code and yields an empty `TARGET`. Exit 3 = not inside tmux; exit 4 = codex died on launch (after one auto-retry, with codex's last output on stderr). Only those two route to the `bind` fallback (a plain re-run also recovers exit 4). Any other nonzero — above all 127 / "No such file or directory", i.e. the `CODEX=` path is wrong (bare `$CLAUDE_PLUGIN_ROOT` is never exported into the Bash tool; only the braces placeholder in SKILL.md is substituted, at skill load) — must be surfaced, never routed to `bind`; that silent fall-through is how a session inside tmux ends up with a stray `cc-codex` window.
 
 - **Returns a pane id.** `pane` prints the pane id (e.g. `%53`) on stdout line 1. Use it directly as `tmux ... -t "$TARGET"`.
 - **Reuse / relaunch / respawn semantics.** `pane` is idempotent: it locates and reuses the existing codex pane if alive, RELAUNCHES codex inside the kept shell pane if codex exited (keep-shell default — same pane id, no new split), respawns the pane if its root process died, and only splits a new pane when none exists. Follow-ups, continuations, and new sub-tasks all land in the same pane.
@@ -46,7 +53,7 @@ tmux attach -t cc-codex
 
 Inside, `Ctrl-b w` lists windows, `Ctrl-b n` / `p` cycle through them.
 
-The helper script at `$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh` exposes these lifecycle subcommands:
+The helper script (`$CODEX`, the literal path from SKILL.md) exposes these lifecycle subcommands:
 
 | Subcommand | Purpose |
 |---|---|
@@ -71,7 +78,7 @@ This is the fallback when Claude is **not** running inside tmux (so `pane` canno
 # 1) Get THE bound window for this Claude session (idempotent).
 #    Line 1 = window name; line 2 = attach hint. Default sandbox is read-only;
 #    add --full-auto on first creation for an editable workspace.
-WIN=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh bind --cwd "$PWD" | head -n1)
+WIN=$("$CODEX" bind --cwd "$PWD" | head -n1)
 TARGET="cc-codex:$WIN"
 
 # 2) Wait for codex to be input-ready (only needed right after creation;
@@ -108,7 +115,7 @@ Parallel task in the CURRENT window ("in parallel", "a second codex", "also star
 # Derive a topic slug per SKILL.md, then spawn/reuse the EXTRA pane
 # (announce before spawning). Capture-and-check like the resolve snippet —
 # do NOT pipe into head unchecked (exit 4 = codex died would yield an empty id).
-if _eout=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --topic tests --cwd "$PWD"); then
+if _eout=$("$CODEX" pane --topic tests --cwd "$PWD"); then
     EXTRA=$(printf '%s\n' "$_eout" | head -n1)
 fi
 # Drive it as its own $TARGET with the same recipes. Keep a PER-PANE baseline
@@ -120,7 +127,7 @@ Per-topic reuse/relocate semantics: `pane --topic` is idempotent per topic — i
 Explicitly requested SEPARATE WINDOW ("separate window", "new window") → `new`:
 
 ```bash
-EXTRA=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh new auth --cwd "$PWD" | head -n1)
+EXTRA=$("$CODEX" new auth --cwd "$PWD" | head -n1)
 # Wait for ready, then drive it with the same recipes targeting cc-codex:$EXTRA
 # (set TARGET="cc-codex:$EXTRA"). The default codex pane/window keeps running
 # untouched in parallel.
@@ -272,12 +279,12 @@ Under the pane/bound default, normal reuse is automatic — `pane` (inside tmux)
 ```bash
 # Dead pane/window recovery with context salvage (only if continuity matters).
 # Re-run the resolve-target snippet (pane inside tmux, else bind).
-TARGET=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --cwd "$PWD" | head -n1)
+TARGET=$("$CODEX" pane --cwd "$PWD" | head -n1)
 # If you saved scrollback before it died, replay it as inline context in the
 # first prompt. (pane/bind already respawned codex in $TARGET.)
 
 # Cross-Claude-session reference: widen the search, then confirm with the user.
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh find auth --any-session
+"$CODEX" find auth --any-session
 # → codex-auth-bbbbbb-x7    alive    /Users/asun/codes/myproj
 # Confirm: "I see codex-auth-bbbbbb-x7 (alive) — reuse this one?"
 ```

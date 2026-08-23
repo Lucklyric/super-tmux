@@ -12,7 +12,10 @@ driving verbs, routing judgment, adaptive I/O, isolation rules — is the **`tmu
 skill**; read it first. This page is only the claude-kind calibration facts.
 
 ```bash
-ENGINE="$CLAUDE_PLUGIN_ROOT/scripts/agent-tmux.sh"
+# Literal absolute path once this skill is loaded via the Skill tool (the braces
+# placeholder is substituted; bare $CLAUDE_PLUGIN_ROOT is NOT an exported variable).
+# Re-state this line at the top of every Bash call.
+ENGINE="${CLAUDE_PLUGIN_ROOT}/scripts/agent-tmux.sh"
 
 $ENGINE --kind claude pane --cwd "$PWD"          # resolve/reuse THE claude co-worker pane
 $ENGINE --kind claude prompt --wait -- "Read @spec.md and implement section 2."
@@ -50,7 +53,7 @@ $ENGINE --kind claude read --delta
 ## Collaboration example (codex reviewer + claude implementer)
 
 ```bash
-CODEX="$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh"
+CODEX="${CLAUDE_PLUGIN_ROOT}/scripts/codex-tmux.sh"   # substituted at skill load, like $ENGINE
 $ENGINE --kind claude pane --topic impl --cwd "$PWD"
 $CODEX pane --topic review --cwd "$PWD"
 

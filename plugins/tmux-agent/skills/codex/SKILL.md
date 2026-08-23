@@ -30,21 +30,31 @@ Use OpenAI's Codex CLI (GPT-5.6 series — default `gpt-5.6-sol`, `xhigh` reason
 
 ## Default workflow: codex pane in the current window
 
-**By default, resolve THE codex target for this Claude session, then drive ALL interaction against it.** When Claude is inside tmux the target is a PANE split into the current window (visible right next to Claude); when Claude is not inside tmux it is a dedicated `cc-codex` window. This resolve-target snippet is the canonical opening of every codex interaction:
+**By default, resolve THE codex target for this Claude session, then drive ALL interaction against it.** When Claude is inside tmux the target is a PANE split into the current window (visible right next to Claude); when Claude is not inside tmux it is a dedicated `cc-codex` window. This snippet is the canonical opening of every codex interaction:
 
 ```bash
-# Resolve THE codex target. Default: a pane in the current window.
-if [[ -n "${TMUX:-}" ]] && _out=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --cwd "$PWD"); then
-    TARGET=$(printf '%s\n' "$_out" | head -n1)   # pane id, e.g. %53
-else
-    # pane returned nonzero (exit 3 = not in tmux; exit 4 = codex died on launch)
-    # → fall back to a dedicated cc-codex window.
-    TARGET="cc-codex:$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh bind --cwd "$PWD" | head -n1)"
-fi
+# Helper path. The CLAUDE_PLUGIN_ROOT placeholder (braces form) is replaced with
+# this plugin's absolute install path when the skill is loaded via the Skill
+# tool, so the next line already reads as a literal path — copy it verbatim at
+# the top of EVERY Bash call (each call is a fresh shell; nothing is exported).
+CODEX="${CLAUDE_PLUGIN_ROOT}/scripts/codex-tmux.sh"
+
+# Resolve THE codex target. Default: a pane in the current window. bind (a
+# cc-codex window) is ONLY for exit 3 (not inside tmux) and exit 4 (codex died
+# at launch, after one auto-retry). Anything else — 127 wrong path, 2 bad flag —
+# means STOP and surface it; never fall through to bind.
+if [[ -n "${TMUX:-}" ]]; then _out=$("$CODEX" pane --cwd "$PWD"); _rc=$?; else _rc=3; fi
+case $_rc in
+    0)   TARGET=$(printf '%s\n' "$_out" | head -n1) ;;                  # pane id, e.g. %53
+    3|4) TARGET="cc-codex:$("$CODEX" bind --cwd "$PWD" | head -n1)" ;;  # fallback window
+    *)   unset TARGET; echo "codex-tmux.sh pane failed (exit $_rc; 127 = wrong helper path → re-invoke the tmux-agent:codex skill) — NOT falling back to bind" >&2 ;;
+esac
 # Now drive "$TARGET" with the verbs (prompt --wait → read --delta).
 ```
 
-Capture `pane`'s output to a variable first and check its real exit code (do **not** pipe straight into `head` — that masks the exit code, and without `pipefail` the `&&` would succeed with an empty `TARGET`). Exit 3 means "not inside tmux"; exit 4 means codex died on launch (after one auto-retry) — in either case the `bind` fallback (or a re-run, which auto-retries) is the recovery.
+Capture `pane`'s output to a variable first and branch on its real exit code (do **not** pipe straight into `head` — that masks the exit code and yields an empty `TARGET`). Only exit 3 ("not inside tmux") and exit 4 (codex died on launch, after one auto-retry) route to the `bind` fallback; a re-run also recovers exit 4. **Any other failure — above all exit 127 / "No such file or directory", which means the helper path is wrong — must stop the flow and be surfaced, never routed to `bind`.** A bare `pane || bind` guard is exactly how a session running inside tmux ends up with a stray `cc-codex` window instead of a pane.
+
+The `CODEX=` line above is a literal absolute path once this skill is loaded: the Skill tool substitutes the braces placeholder. It is **not** an exported environment variable — bare `$CLAUDE_PLUGIN_ROOT` is empty inside the Bash tool, so never type that form into a command. Re-state the literal `CODEX=` line at the top of every Bash call (each call is a fresh shell), and if the path ever fails, re-invoke the skill rather than guessing.
 
 `$TARGET` is target-agnostic — it is a pane id (e.g. `%53`) inside tmux, or `cc-codex:<window>` in the fallback. The driving verbs default to this session's main pane, so inside tmux you rarely pass it; in the fallback (or for explicit addressing) pass `--target "$TARGET"`. Both `pane` and `bind` are idempotent: they reuse the live codex if alive, relaunch codex inside the kept shell if it exited (see below), and respawn if dead — so follow-ups, continuations, and new sub-tasks all land in the same pane/window. You do **not** need `find` or a topic slug for the normal case. Pass `--full-auto` on the first `pane`/`bind` call for write mode (default is `--read-only`); the sandbox is fixed while codex runs (a relaunch after codex exited applies the newly requested sandbox).
 
@@ -67,8 +77,8 @@ The multi-pane model: the default codex is the topic-`main` pane; parallel tasks
 `panes` is the read-only detection command — run it to see every codex pane you own and where it is (e.g. at the start of a conversation, or before deciding to spawn):
 
 ```bash
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh panes          # this agent's codex panes
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh panes --all    # every agent's (diagnostics only)
+"$CODEX" panes          # this agent's codex panes
+"$CODEX" panes --all    # every agent's (diagnostics only)
 ```
 
 Output: one TSV line per pane —
@@ -88,7 +98,7 @@ Exit 0 if at least one pane printed, exit 1 if none. Every field is guaranteed n
 When the user requests a parallel task, spawn/reuse the EXTRA pane for that topic IN THE CURRENT WINDOW. Capture-and-check like the resolve snippet — do **not** pipe into `head` unchecked (exit 4 = codex died at launch would yield an empty id):
 
 ```bash
-if _eout=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --topic tests --cwd "$PWD"); then
+if _eout=$("$CODEX" pane --topic tests --cwd "$PWD"); then
     EXTRA=$(printf '%s\n' "$_eout" | head -n1)
 fi   # nonzero exit: surface stderr; never drive an empty target
 ```
@@ -100,7 +110,7 @@ All the default `pane` semantics apply per-topic: reuse-if-alive, relaunch-in-ke
 Each pane is addressed by its topic (`--topic <slug>`; omit for the main pane). The verbs keep a PER-PANE baseline automatically — each `prompt` records its own pane's anchor, so nothing is shared across panes. One driver (this Claude) per pane; you may drive several panes concurrently:
 
 ```bash
-CODEX="$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh"
+# $CODEX = the literal helper path from "Default workflow"; re-state it in each Bash call.
 $CODEX prompt -- "task A"                        # main pane
 $CODEX prompt --topic tests -- "task B"          # extra pane, own baseline
 
@@ -133,7 +143,7 @@ Extra-pane titles become `codex-<topic>-<claude6>` (the primary pane's title sta
 
 ## Lifecycle one-liners (helper script)
 
-The helper script at `$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh` handles lifecycle (this section) and interaction (the driving verbs, next section).
+The helper script (`$CODEX`, the literal path set in "Default workflow") handles lifecycle (this section) and interaction (the driving verbs, next section).
 
 ```bash
 # DEFAULT entry point (inside tmux): get/create THE codex pane in the CURRENT
@@ -147,7 +157,7 @@ The helper script at `$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh` handles lifecyc
 # default 45; out-of-range → exit 2); --topic <slug> (default "main" = the
 # primary pane; a slug resolves the EXTRA pane for that topic, same per-topic
 # semantics).
-TARGET=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --cwd "$PWD" | head -n1)
+TARGET=$("$CODEX" pane --cwd "$PWD" | head -n1)
 # See the resolve-$TARGET snippet above for the full inside-tmux-vs-fallback guard
 # (it checks pane's exit code, so exit 3/4 fall through to the bind fallback).
 
@@ -156,49 +166,49 @@ TARGET=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --cwd "$PWD" | head -n1)
 # (state = alive|shell|dead; shell = codex exited, pane kept at an
 # interactive shell). Exit 0 if ≥1 pane printed, else 1. Never creates
 # anything. --all = every agent's panes (diagnostics only).
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh panes
+"$CODEX" panes
 
 # PARALLEL task (user explicitly asked): spawn/reuse the EXTRA topic pane
 # IN THE CURRENT WINDOW. Announce before spawning; capture-and-check the exit
 # code (see "Detecting & orchestrating multiple codex panes").
-if _eout=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --topic <slug> --cwd "$PWD"); then
+if _eout=$("$CODEX" pane --topic <slug> --cwd "$PWD"); then
     EXTRA=$(printf '%s\n' "$_eout" | head -n1)
 fi
 
 # FALLBACK entry point (NOT inside tmux): get/create THE single bound window
 # (codex-<claude6>) in the cc-codex session. Idempotent. Line 1 = window name;
 # line 2 = attach hint. Drive it as TARGET="cc-codex:$WIN".
-WIN=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh bind --cwd "$PWD" | head -n1)
+WIN=$("$CODEX" bind --cwd "$PWD" | head -n1)
 
 # Spawn an EXTRA window — ONLY when the user explicitly asked for a SEPARATE
 # WINDOW (parallel tasks in the current window use `pane --topic` above).
 # Needs a topic slug. Returns immediately — does not wait for codex to be ready.
-WIN=$($CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh new <topic> --cwd "$PWD" | head -n1)
+WIN=$("$CODEX" new <topic> --cwd "$PWD" | head -n1)
 
 # List this conversation's windows (bound + any extras).
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh ls --mine
+"$CODEX" ls --mine
 
 # Look up an extra window by topic (rarely needed; pane/bind handle the default).
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh find <topic> --cwd "$PWD"
+"$CODEX" find <topic> --cwd "$PWD"
 # Exit 0 + one line per match (tab-separated: window, state, cwd).
 # Exit 1 + no output → no match.
 
 # Print attach command for the user.
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh attach "$WIN"
+"$CODEX" attach "$WIN"
 
 # Rename an extra window's topic; preserves claude6+rand2 suffix.
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh rename "$WIN" "newtopic"
+"$CODEX" rename "$WIN" "newtopic"
 
 # Kill a specific codex pane/window (kill accepts a pane id like %53) or all of
 # THIS Claude session's codex (ALL panes regardless of topic + windows). Both are
 # claude6-scoped and pane-aware — they only ever touch this agent's own codex.
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh kill "$TARGET"   # pane id (%53) OR window
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh kill --mine
+"$CODEX" kill "$TARGET"   # pane id (%53) OR window
+"$CODEX" kill --mine
 # kill --orphaned exists too but is GLOBAL/cross-agent (reaps every agent's dead
 # codex) — do NOT use it in normal flow; only on explicit "clean up everything".
 
 # One-shot escape hatch (no tmux).
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh exec "<prompt>"
+"$CODEX" exec "<prompt>"
 ```
 
 The script keeps `send` and `capture` as recognized keywords ONLY to print a migration error pointing at the driving verbs below. **Drive interaction via the verbs** — raw `tmux send-keys`/`capture-pane` remains for calibration, debugging, and unexpected TUI states only.
@@ -208,7 +218,7 @@ The script keeps `send` and `capture` as recognized keywords ONLY to print a mig
 The whole loop — baseline, atomic send, two-phase settle detection, delta extraction — is script commands. Calibration (the `gpt-5\.[0-9].*·` idle regex, bottom-of-pane anchoring, deadlines) lives inside the verbs via the codex profile; you don't hand-roll it.
 
 ```bash
-CODEX="$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh"
+# $CODEX = the literal helper path from "Default workflow"; re-state it in each Bash call.
 
 # Send a prompt and block until the turn settles (the default move).
 # Atomic send: literal keys, short pause, Enter as its own event. Records the
@@ -291,8 +301,8 @@ Cleanup is simple under the pane default: normally there is just the one codex p
 
 ```bash
 # What codex do I own? Panes (main + any topic extras) via panes; windows via ls.
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh panes
-$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh ls --mine
+"$CODEX" panes
+"$CODEX" ls --mine
 ```
 
 | Situation | Offer the user |
@@ -358,9 +368,9 @@ Choose a 5.6-series combination that fits the task instead of always using the d
 To use a non-default combination for a task, set the env vars when resolving the target, e.g.:
 
 ```bash
-CC_CODEX_EFFORT=max   $CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh pane --cwd "$PWD"   # sol + max
+CC_CODEX_EFFORT=max   "$CODEX" pane --cwd "$PWD"   # sol + max
 CC_CODEX_MODEL=gpt-5.6-luna CC_CODEX_EFFORT=medium \
-    $CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh exec "quick one-off question"
+    "$CODEX" exec "quick one-off question"
 ```
 
 **When selection applies.** Model and effort are fixed when a codex process STARTS: (a) the first `pane`/`bind`/`new` call that actually spawns codex, (b) every `exec` one-shot (the cheapest way to run a different combo per task), (c) a new `--topic` pane, and (d) a relaunch into the kept shell after codex exited (state `shell`) — a relaunch is a fresh start, so env overrides DO apply there. A pane/window with codex still RUNNING keeps whatever it was started with — an env override on a live reuse does nothing, and the script warns on stderr (`… do NOT apply to a reused pane`); surface that warning. To switch the main pane's model/effort, `kill "$TARGET"` and re-resolve with the new env — that destroys codex's conversation context, so confirm with the user first (see "Never kill silently"). For a one-off harder/cheaper task mid-conversation, prefer an `exec` one-shot or a new `--topic` pane over killing the main pane.
@@ -389,7 +399,7 @@ Route here ONLY when the user explicitly asks for a `codex review` report of a d
 For `exec` one-shots, prefer these over scraping stdout when you need the result programmatically: `-o FILE` / `--output-last-message FILE` (only codex's final message, no TUI chrome), `--output-schema FILE` (JSON-Schema-constrained output), `--json` (JSONL event stream). Related: `--ephemeral` runs without persisting a session file (throwaway one-shot, not resumable). Flag details: `references/cli-features.md`.
 
 ```bash
-OUT=$(mktemp -t cc-codex-out); $CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh exec -o "$OUT" "Summarize @report.md in 3 bullets."
+OUT=$(mktemp -t cc-codex-out); "$CODEX" exec -o "$OUT" "Summarize @report.md in 3 bullets."
 ```
 
 ## File context passing
@@ -406,6 +416,7 @@ Details and resolution rules: `references/file-context.md`.
 
 The helper script fails loudly (non-zero exit + stderr) for lifecycle errors. When it fails, surface the output verbatim. Common signals:
 
+- **`No such file or directory` / exit 127 from the helper** — the `CODEX=` path is wrong. Bare `$CLAUDE_PLUGIN_ROOT` is not an exported variable; only the braces placeholder is substituted, and only in skill content loaded via the Skill tool. Re-invoke `tmux-agent:codex` and copy the literal path. This is **not** a reason to call `bind` — a path error must never route codex into a `cc-codex` window.
 - **Codex exited immediately at launch** — `pane`/`bind` exit **4** (after one auto-retry) and print codex's last output on stderr. Surface that output; re-run (auto-retries once) or fall back to `bind`. A `dead` state in `ls --mine` / `find` is the steady-state version of the same signal (codex's process is gone). Offer to respawn (resolve the target again) or salvage context first (see `reuse-existing-window`).
 - Window/pane-not-found errors from `ls`, `kill`, `attach`, `rename` — surface the message.
 - v3.1.0 migration errors from `send`/`capture` — exit 64. Use the driving verbs instead.

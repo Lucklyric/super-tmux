@@ -61,7 +61,10 @@ Generic env knobs (kind wrappers map their legacy names onto these): `CC_AGENT_B
 Lifecycle + interaction, all with clean exit codes:
 
 ```bash
-ENGINE="$CLAUDE_PLUGIN_ROOT/scripts/agent-tmux.sh"
+# Literal absolute path once this skill is loaded via the Skill tool (the braces
+# placeholder is substituted; bare $CLAUDE_PLUGIN_ROOT is NOT an exported variable).
+# Re-state this line at the top of every Bash call.
+ENGINE="${CLAUDE_PLUGIN_ROOT}/scripts/agent-tmux.sh"
 
 # Lifecycle: resolve/reuse THE co-worker pane (idempotent: reuse if alive,
 # relaunch in kept shell if exited, respawn if dead, split only if absent).
@@ -169,7 +172,7 @@ lifecycle operations and any same-pane parallelism with `flock`:
 N named co-worker panes side by side, one driver (you) orchestrating:
 
 ```bash
-CODEX="$CLAUDE_PLUGIN_ROOT/scripts/codex-tmux.sh"
+CODEX="${CLAUDE_PLUGIN_ROOT}/scripts/codex-tmux.sh"   # substituted at skill load, like $ENGINE
 $CODEX pane --topic review --cwd "$PWD"                      # codex reviewer
 $ENGINE --kind claude pane --topic impl --cwd "$PWD"         # claude implementer
 
