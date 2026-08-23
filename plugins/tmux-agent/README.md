@@ -16,6 +16,8 @@ pane co-workers** beside Claude Code:
   calibrate from their own pane.
 - **Deterministic triggering**: a UserPromptSubmit hook nudges the right
   skill when a prompt names an agent.
+- **Session re-sync**: `/tmux-agent:refresh` re-reads the contract, resolves
+  the helper path, and reports drift (stray windows, stale context files).
 
 Depends on the `tmux-core` plugin (auto-installed as a dependency).
 
