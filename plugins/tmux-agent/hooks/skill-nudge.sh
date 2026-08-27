@@ -6,6 +6,29 @@
 # phrasing (bare "claude" is ambient in Claude Code conversations).
 set -euo pipefail
 
+# Version staleness: Claude Code pins a plugin's paths for the LIFE of a
+# session, so a conversation started before an update keeps loading the OLD
+# copy of the skills and calling the OLD scripts — shipped fixes never reach
+# it, silently, for as long as it runs. This hook knows its own version from
+# its path (<cache>/<plugin>/<version>/hooks/<file>), so it can compare that
+# against the newest installed copy and say so on every nudge. Prints a
+# sentence to append to the context, or nothing when current / not a
+# versioned install (local checkout, dev symlink).
+staleness_note() {
+    local here version parent newest
+    here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)" || return 0
+    version="$(basename "$here")"
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 0
+    parent="$(dirname "$here")"
+    newest="$(find "$parent" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; 2>/dev/null \
+        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
+    [[ -n "$newest" && "$newest" != "$version" ]] || return 0
+    # Only warn when the installed copy is actually NEWER than ours.
+    [[ "$(printf '%s\n%s\n' "$version" "$newest" | sort -V | tail -n1)" == "$newest" ]] || return 0
+    printf ' [STALE PLUGIN] This session loaded tmux-agent %s, but %s is installed. Plugin paths are pinned when a session starts, so fixes in %s are NOT active here and the skill text you have may be outdated. Tell the user to restart this session (or run /reload-plugins) before relying on agent-pane orchestration.' \
+        "$version" "$newest" "$newest"
+}
+
 input=$(cat)
 
 # Extract the prompt field (jq preferred; python3 fallback; else give up silently).
@@ -25,6 +48,10 @@ elif printf '%s' "$prompt" | grep -qiE '(^|[^a-zA-Z0-9_])((spawn|launch|start|dr
 fi
 
 [[ -z "$context" ]] && exit 0
+
+# Append the staleness warning (if any) so a session running an outdated copy
+# says so instead of silently misbehaving.
+context+="$(staleness_note)"
 
 jq -n --arg ctx "$context" '{
   "hookSpecificOutput": {

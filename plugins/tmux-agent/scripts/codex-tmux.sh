@@ -92,8 +92,10 @@ Subcommands:
       by default; --all lists every agent's codex panes. Exits 0 if at least
       one line was printed, 1 otherwise. Never creates the cc-codex session.
 
-  bind [--cwd DIR] [--full-auto|--read-only]
-      Dedicated-window mode / fallback when NOT inside tmux. Bind this Claude
+  bind [--cwd DIR] [--full-auto|--read-only] [--force]
+      Dedicated-window mode / fallback when NOT inside tmux. Refuses with
+      exit 7 when this Claude session already owns a live (or kept-shell)
+      codex PANE — drive that pane instead; --force overrides. Bind this Claude
       session to its single reused codex window (codex-<claude6>) in the
       cc-codex session and print it. Idempotent: creates codex if absent,
       reuses if alive, relaunches codex in the kept shell if codex exited,

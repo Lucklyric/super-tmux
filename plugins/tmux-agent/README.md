@@ -21,6 +21,9 @@ pane co-workers** beside Claude Code:
 - **Event log**: every lifecycle decision (spawn/reuse/relaunch, bind
   fallbacks with reasons, kills) lands in an append-only JSONL audit log;
   `log --tail N` shows why a window or pane appeared.
+- **Guarded routing**: the dedicated-window fallback refuses (exit 7) while a
+  live pane exists, the shared session is created only on an actual spawn, and
+  the nudge hook warns when a session is pinned to an outdated plugin version.
 
 Depends on the `tmux-core` plugin (auto-installed as a dependency).
 

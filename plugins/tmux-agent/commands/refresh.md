@@ -71,6 +71,7 @@ Flag as **drift** (report, then offer the fix — do not act unsolicited):
 | Observation | Meaning | Offer |
 |---|---|---|
 | `TMUX` set AND `ls --mine` lists a window | old-manner artifact: a `cc-codex` window exists while a pane was possible | consolidate: `kill <window>`, then `pane --cwd "$PWD"` |
+| A `cc-<kind>` session holding only `_placeholder` | leftover from an aborted/refused window call (pre-1.3.0 created it up front) | offer `tmux kill-session -t cc-<kind>` — check first that it holds no real window |
 | two panes with topic `main` | duplicate from a rolled session id | `kill %id` on the stale one |
 | pane in a different `session:window` than current | it will be relocated on the next `pane` call | none — informational |
 | state `dead` / `shell` | respawn / relaunch happens automatically on next `pane` | none — informational |
@@ -92,6 +93,14 @@ ls -d "$HOME"/.claude/plugins/cache/*/tmux-agent/*/ 2>/dev/null   # other cached
 Report the active version, and whether older cached versions are present (they
 are inert unless enabled, but confirm none is enabled at project scope by
 checking `.claude/settings.json` in the current project).
+
+**Staleness is the important one.** Plugin paths are pinned when a session
+starts, so a conversation older than the last update keeps loading the OLD
+skills and calling the OLD scripts — shipped fixes never reach it. Compare the
+version in the resolved helper path against the newest installed copy; if they
+differ, say so plainly and tell the user to restart the session (or run
+`/reload-plugins`). The skill-nudge hook also flags this on every prompt that
+names an agent, but only from the version it is itself pinned to.
 
 ## 5. Scan context and memory files for conflicts
 

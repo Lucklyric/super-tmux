@@ -178,6 +178,8 @@ fi
 # FALLBACK entry point (NOT inside tmux): get/create THE single bound window
 # (codex-<claude6>) in the cc-codex session. Idempotent. Line 1 = window name;
 # line 2 = attach hint. Drive it as TARGET="cc-codex:$WIN".
+# Exits 7 if this session already owns a live/kept-shell codex PANE — drive
+# that pane instead (--force overrides). Nothing is created on a refusal.
 WIN=$("$CODEX" bind --cwd "$PWD" | head -n1)
 
 # Spawn an EXTRA window — ONLY when the user explicitly asked for a SEPARATE
@@ -416,6 +418,7 @@ Details and resolution rules: `references/file-context.md`.
 
 The helper script fails loudly (non-zero exit + stderr) for lifecycle errors. When it fails, surface the output verbatim. Common signals:
 
+- **`bind` exit 7 — a codex pane already exists.** The engine refuses to open a `cc-codex` window while this session owns a live (or kept-shell) pane, because that pane is drivable from anywhere — the verbs address panes server-wide, inside tmux or not. Drive the pane it names; nothing was created. Only `kill` it first, or pass `--force`, if the user actually wants a separate window.
 - **`No such file or directory` / exit 127 from the helper** — the `CODEX=` path is wrong. Bare `$CLAUDE_PLUGIN_ROOT` is not an exported variable; only the braces placeholder is substituted, and only in skill content loaded via the Skill tool. Re-invoke `tmux-agent:codex` and copy the literal path. This is **not** a reason to call `bind` — a path error must never route codex into a `cc-codex` window.
 - **Codex exited immediately at launch** — `pane`/`bind` exit **4** (after one auto-retry) and print codex's last output on stderr. Surface that output; re-run (auto-retries once) or fall back to `bind`. A `dead` state in `ls --mine` / `find` is the steady-state version of the same signal (codex's process is gone). Offer to respawn (resolve the target again) or salvage context first (see `reuse-existing-window`).
 - Window/pane-not-found errors from `ls`, `kill`, `attach`, `rename` — surface the message.

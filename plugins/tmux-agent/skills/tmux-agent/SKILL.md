@@ -99,6 +99,14 @@ hand-driving an unprofiled CLI — live in `references/interaction-recipes.md`.
 auth). `pane`/`bind` verify liveness with one auto-retry and surface the CLI's last
 output on stderr (exit 4). Never drive a target you haven't confirmed alive.
 
+**Structural guard on routing.** `bind` (the dedicated-window fallback) **refuses with
+exit 7 while this session already owns a live or kept-shell pane** — that pane is
+drivable from anywhere, so a second target would only strand the conversation. Nothing
+is created on a refusal, and the shared `cc-<kind>` session is created only at the
+moment of an actual spawn, so an aborted call never leaves a stray session behind.
+`--force` covers the deliberate case. This is a guard in the engine, not advice in a
+skill: it holds even when a session is running outdated skill text.
+
 **Event log (audit trail).** Every lifecycle decision — spawn/reuse/relaunch/relocate,
 each `bind` fallback with its reason, `new` windows, kills — appends one JSONL record
 to `~/.local/state/tmux-agent/events.jsonl` (shared across kinds; `CC_AGENT_LOG=0`

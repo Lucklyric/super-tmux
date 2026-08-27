@@ -126,6 +126,12 @@ ensure_session() {
         tmux new-session -d -s "$SESSION_NAME" -n "_placeholder" -x 200 -y 50
         # Optionally: set the placeholder to do nothing useful.
         tmux send-keys -t "$SESSION_NAME:_placeholder" "echo '$SESSION_NAME placeholder — do not use'" Enter
+        # Logged because creating this session is itself a routing signal: it
+        # only ever happens on the window path (bind/new), so an unexpected
+        # "$SESSION_NAME" appearing is traceable even if the caller then dies
+        # before spawning. Callers create it LATE (right before spawning), so
+        # a refused or aborted call leaves no stray session behind.
+        log_event session-create "$SESSION_NAME" - - "$PWD"
     fi
 }
 
@@ -263,7 +269,7 @@ cmd_new() {
     fi
     validate_topic "$topic" || return 2
 
-    ensure_session
+    ensure_tmux_or_die
 
     # Compose unique window name (retry once on extremely unlikely collision).
     local window
@@ -277,6 +283,10 @@ cmd_new() {
     fi
 
     build_agent_cmd "$sandbox" "$approval"
+
+    # Create the shared session only now that we are committed to spawning, so
+    # an early return above never leaves a stray session + placeholder.
+    ensure_session
 
     # Spawn the window detached (keep-shell wrapper unless CC_AGENT_KEEP_SHELL=0).
     tmux new-window -t "$SESSION_NAME" -n "$window" -d -c "$cwd" \
@@ -312,18 +322,39 @@ cmd_bind() {
     local sandbox="$SANDBOX_DEFAULT"
     local approval="$APPROVAL_DEFAULT"
     local want_sandbox=""
+    local force=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --cwd) cwd="$2"; shift 2 ;;
             --full-auto) sandbox="workspace-write"; want_sandbox="workspace-write"; shift ;;
             --read-only) sandbox="read-only"; want_sandbox="read-only"; shift ;;
+            --force) force=1; shift ;;
             -*) echo "$LABEL bind: unknown flag '$1'" >&2; return 2 ;;
             *) echo "$LABEL bind: unexpected arg '$1'" >&2; return 2 ;;
         esac
     done
 
-    ensure_session
+    ensure_tmux_or_die
+
+    # Guard: never open a dedicated window while this session already owns a
+    # live agent PANE. `bind` exists for the no-pane case; once a pane exists
+    # it is drivable from anywhere (the verbs address panes server-wide, so
+    # this holds even outside tmux), and adding a window would strand the
+    # conversation in a second target and leave a stray "$SESSION_NAME" behind.
+    # This is the structural stop for the drift the skill text only asks for.
+    if (( ! force )); then
+        local guard_match guard_pane guard_state
+        if guard_match="$(find_agent_pane "$(compute_claude6)" main 2>/dev/null)"; then
+            guard_pane="${guard_match%%$'\t'*}"
+            guard_state="${guard_match##*$'\t'}"
+            if [[ "$guard_state" == "alive" || "$guard_state" == "shell" ]]; then
+                log_event bind-refused "pane-exists-$guard_state" - "$guard_pane" "$cwd"
+                echo "$LABEL bind: this session already owns $KIND pane $guard_pane (state: $guard_state) — drive it instead of opening a window (the verbs address panes server-wide, inside tmux or not). To override: '$LABEL.sh bind --force'; to replace the pane: '$LABEL.sh kill $guard_pane' first." >&2
+                return 7
+            fi
+        fi
+    fi
 
     local window bind_reason="fresh"
     window="$WIN_PREFIX-$(compute_claude6)"
@@ -377,6 +408,12 @@ cmd_bind() {
     fi
 
     build_agent_cmd "$sandbox" "$approval"
+
+    # Create the shared session only now that we are committed to spawning: an
+    # early return above (guard, reuse, relaunch) must never leave a stray
+    # session + placeholder behind. window_exists() above tolerates a missing
+    # session — list-windows simply matches nothing.
+    ensure_session
 
     # Spawn the bound window detached, then verify the agent survived launch;
     # retry once on immediate exit (transient home-dir / MCP init hiccups
@@ -1350,7 +1387,10 @@ Subcommands (identical semantics to the codex wrapper's documentation):
   pane [--topic SLUG] [--cwd DIR] [--full-auto|--read-only]
        [--horizontal|--vertical] [--size PCT]
   panes [--all] [--json]
-  bind [--cwd DIR] [--full-auto|--read-only]
+  bind [--cwd DIR] [--full-auto|--read-only] [--force]
+      Dedicated-window fallback for when no pane is possible. Refuses with
+      exit 7 when this session already owns a live/kept agent pane (drive
+      that instead); --force overrides.
   new <topic> [--cwd DIR] [--full-auto|--read-only]
   prompt [--target T|--topic SLUG] [--file PATH] [--wait] [--timeout SECS]
          [--activity-timeout SECS] [--] <text...>
