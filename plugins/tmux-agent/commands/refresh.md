@@ -62,6 +62,7 @@ lines so the correction is explicit in-context:
 ```bash
 "$CODEX" panes                 # TSV: pane_id, topic, state, session:window, cwd (exit 1 = none)
 "$CODEX" ls --mine             # windows owned by this claude6
+"$CODEX" log --tail 20         # recent lifecycle events — bind-*/new-window rows explain any window
 tmux display-message -p '#{session_name}:#{window_index}'   # where we are now
 ```
 

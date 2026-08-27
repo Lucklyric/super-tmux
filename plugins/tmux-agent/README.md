@@ -18,6 +18,9 @@ pane co-workers** beside Claude Code:
   skill when a prompt names an agent.
 - **Session re-sync**: `/tmux-agent:refresh` re-reads the contract, resolves
   the helper path, and reports drift (stray windows, stale context files).
+- **Event log**: every lifecycle decision (spawn/reuse/relaunch, bind
+  fallbacks with reasons, kills) lands in an append-only JSONL audit log;
+  `log --tail N` shows why a window or pane appeared.
 
 Depends on the `tmux-core` plugin (auto-installed as a dependency).
 

@@ -297,6 +297,7 @@ cmd_new() {
     tmux set-option -w -t "$SESSION_NAME:$window" "@${OPT_PREFIX}_effort" "$AGENT_EFFORT" 2>/dev/null || true
     tmux set-option -w -t "$SESSION_NAME:$window" "@${OPT_PREFIX}_bin" "$AGENT_BIN" 2>/dev/null || true
 
+    log_event new-window explicit "$topic" "$window" "$cwd"
     # Output: window name on stdout line 1, attach hint on line 2.
     echo "$window"
     echo "Attach with: tmux attach -t $SESSION_NAME \; select-window -t $window"
@@ -324,7 +325,7 @@ cmd_bind() {
 
     ensure_session
 
-    local window
+    local window bind_reason="fresh"
     window="$WIN_PREFIX-$(compute_claude6)"
     if window_exists "$window"; then
         local state
@@ -346,6 +347,7 @@ cmd_bind() {
                 || { [[ -n "${CC_AGENT_EFFORT+x}" && -n "$existing_effort" && "$AGENT_EFFORT" != "$existing_effort" ]]; }; then
                 echo "$LABEL bind: reusing window '$window' (model '${existing_model:-?}', effort '${existing_effort:-?}'); ${ENV_PREFIX}_MODEL/${ENV_PREFIX}_EFFORT do NOT apply to a reused window. Kill and re-bind to switch ($LABEL.sh kill $window && $LABEL.sh bind)." >&2
             fi
+            log_event bind-reuse alive - "$window" "$cwd"
             echo "$window"
             echo "Attach with: tmux attach -t $SESSION_NAME \; select-window -t $window"
             return 0
@@ -360,13 +362,16 @@ cmd_bind() {
                 tmux set-option -w -t "$SESSION_NAME:$window" "@${OPT_PREFIX}_model" "$AGENT_MODEL" 2>/dev/null || true
                 tmux set-option -w -t "$SESSION_NAME:$window" "@${OPT_PREFIX}_effort" "$AGENT_EFFORT" 2>/dev/null || true
                 tmux set-option -w -t "$SESSION_NAME:$window" "@${OPT_PREFIX}_bin" "$AGENT_BIN" 2>/dev/null || true
+                log_event bind-relaunch kept-shell - "$window" "$cwd"
                 echo "$window"
                 echo "Attach with: tmux attach -t $SESSION_NAME \; select-window -t $window"
                 return 0
             fi
+            bind_reason="relaunch-failed"
             tmux kill-window -t "$SESSION_NAME:$window" 2>/dev/null || true
         else
             # Dead/orphaned: clear it out and respawn below.
+            bind_reason="respawn-dead"
             tmux kill-window -t "$SESSION_NAME:$window" 2>/dev/null || true
         fi
     fi
@@ -399,6 +404,7 @@ cmd_bind() {
 
         sleep 0.4
         if [[ "$(window_state "$window")" == "alive" ]]; then
+            log_event bind-create "$bind_reason" - "$window" "$cwd"
             # Output: window name on stdout line 1, attach hint on line 2.
             echo "$window"
             echo "Attach with: tmux attach -t $SESSION_NAME \; select-window -t $window"
@@ -409,6 +415,7 @@ cmd_bind() {
         tmux kill-window -t "$SESSION_NAME:$window" 2>/dev/null || true
         sleep 0.5
     done
+    log_event bind-failed exited-immediately-x2 - "$window" "$cwd"
     echo "$LABEL bind: $KIND exited immediately twice; aborting. Check '$LOGIN_HINT', then re-run." >&2
     return 4
 }
@@ -518,6 +525,7 @@ cmd_pane() {
     local orient="-h"          # horizontal split (agent to the right)
     local size="45"            # percent of the reference pane
     local topic="main"
+    local spawn_reason="fresh"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -545,11 +553,13 @@ cmd_pane() {
     ref_pane="$(current_ref_pane)"
     if [[ -z "$ref_pane" ]]; then
         echo "$LABEL pane: not inside tmux (TMUX_PANE unset). Use 'bind' for dedicated-window mode." >&2
+        log_event pane-unavailable no-ref-pane "$topic" - "$cwd"
         return 3
     fi
     window="$(pane_window_target "$ref_pane" 2>/dev/null || true)"
     if [[ -z "$window" ]]; then
         echo "$LABEL pane: cannot resolve current window from pane '$ref_pane'. Use 'bind'." >&2
+        log_event pane-unavailable no-window "$topic" - "$cwd"
         return 3
     fi
     my_token="$(compute_claude6)"
@@ -575,7 +585,9 @@ cmd_pane() {
             if [[ -n "$pane_win" && "$pane_win" != "$window" ]]; then
                 if tmux join-pane -h -s "$pane" -t "$ref_pane" 2>/dev/null; then
                     tmux select-pane -t "$pane" -T "$title" 2>/dev/null || true
+                    log_event relocate "from-$pane_win" "$topic" "$pane" "$cwd"
                 else
+                    spawn_reason="relocate-failed"
                     tmux kill-pane -t "$pane" 2>/dev/null || true
                     pane=""
                 fi
@@ -599,6 +611,7 @@ cmd_pane() {
                     || { [[ -n "${CC_AGENT_EFFORT+x}" && -n "$existing_effort" && "$AGENT_EFFORT" != "$existing_effort" ]]; }; then
                     echo "$LABEL pane: reusing pane '$pane' (model '${existing_model:-?}', effort '${existing_effort:-?}'); ${ENV_PREFIX}_MODEL/${ENV_PREFIX}_EFFORT do NOT apply to a reused pane. Kill and re-create to switch ($LABEL.sh kill $pane && $LABEL.sh pane$topic_flag)." >&2
                 fi
+                log_event reuse alive "$topic" "$pane" "$cwd"
                 echo "$pane"
                 if [[ "$topic" == "main" ]]; then
                     echo "Reusing $KIND pane $pane (in your current window)."
@@ -619,6 +632,7 @@ cmd_pane() {
                     tmux set-option -p -t "$pane" "@${OPT_PREFIX}_effort" "$AGENT_EFFORT" 2>/dev/null || true
                     tmux set-option -p -t "$pane" "@${OPT_PREFIX}_bin" "$AGENT_BIN" 2>/dev/null || true
                     tmux select-pane -t "$pane" -T "$title" 2>/dev/null || true
+                    log_event relaunch kept-shell "$topic" "$pane" "$cwd"
                     echo "$pane"
                     if [[ "$topic" == "main" ]]; then
                         echo "Relaunched $KIND in kept pane $pane (in your current window)."
@@ -628,10 +642,12 @@ cmd_pane() {
                     return 0
                 fi
                 # Relaunch failed: drop the pane and spawn fresh below.
+                spawn_reason="relaunch-failed"
                 tmux kill-pane -t "$pane" 2>/dev/null || true
             fi
         else
             # Dead pane: remove it and respawn below.
+            spawn_reason="respawn-dead"
             tmux kill-pane -t "$pane" 2>/dev/null || true
         fi
     fi
@@ -659,6 +675,7 @@ cmd_pane() {
             || { echo "$LABEL pane: split-window failed (window too small? try --vertical or 'bind')" >&2; return 1; }
         sleep 0.4
         if [[ "$(pane_agent_state "$new_pane")" == "alive" ]]; then
+            log_event spawn "$spawn_reason" "$topic" "$new_pane" "$cwd"
             echo "$new_pane"
             if [[ "$topic" == "main" ]]; then
                 echo "$AGENT_TITLE pane $new_pane in window $window (visible next to Claude)."
@@ -672,6 +689,7 @@ cmd_pane() {
         tmux kill-pane -t "$new_pane" 2>/dev/null || true
         sleep 0.5
     done
+    log_event launch-failed exited-immediately-x2 "$topic" - "$cwd"
     echo "$LABEL pane: $KIND exited immediately twice; aborting. Re-run, or use 'bind'." >&2
     return 4
 }
@@ -912,6 +930,7 @@ cmd_kill() {
             tmux kill-pane -t "$pid" 2>/dev/null || true
             removed=$(( removed + 1 ))
         done < <(tmux list-panes -a -F "$fmt" 2>/dev/null)
+        log_event kill-orphaned "removed=$removed" - - -
         echo "removed $removed orphan window(s)/pane(s)"
         return 0
     fi
@@ -940,6 +959,7 @@ cmd_kill() {
             tmux kill-pane -t "$pid" 2>/dev/null || true
             removed=$(( removed + 1 ))
         done < <(tmux list-panes -a -F "$fmt" 2>/dev/null)
+        log_event kill-mine "removed=$removed" - - -
         echo "removed $removed window(s)/pane(s) for claude6=$my_token"
         return 0
     fi
@@ -951,11 +971,13 @@ cmd_kill() {
         ensure_tmux_or_die
         tmux kill-pane -t "$window" 2>/dev/null \
             || { echo "$LABEL kill: pane '$window' not found" >&2; return 6; }
+        log_event kill pane-id - "$window" -
         return 0
     fi
     ensure_tmux_or_die
     window_exists "$window" || { echo "$LABEL kill: window '$window' not found" >&2; return 6; }
     tmux kill-window -t "$SESSION_NAME:$window"
+    log_event kill window - "$window" -
 }
 
 # ---------- Driving verbs (send → wait → read → cancel) ----------
@@ -1263,6 +1285,56 @@ cmd_cancel() {
     echo "cancel sent to $t"
 }
 
+# ---------- Event log (append-only JSONL; audit + debugging) ----------
+# Every lifecycle decision (spawn/reuse/relaunch/relocate, the bind fallback,
+# new windows, kills) appends one JSON line, so "why did a cc-<kind> window
+# appear at 15:07" is answerable after the fact. Audit trail only — live state
+# stays in tmux pane/window options; nothing reads this file to make decisions.
+#   CC_AGENT_LOG=0          disable
+#   CC_AGENT_LOG_FILE=path  override the default below
+# Rotates once at ~1MB (events.jsonl -> events.jsonl.1, previous .1 replaced).
+log_file() {
+    printf '%s' "${CC_AGENT_LOG_FILE:-${XDG_STATE_HOME:-$HOME/.local/state}/tmux-agent/events.jsonl}"
+}
+
+# log_event <event> <reason> <topic> <target> <cwd>  ("-" = not applicable).
+# Must never fail or block the engine: every step is guarded, errors ignored.
+log_event() {
+    if [[ "${CC_AGENT_LOG:-1}" == "0" ]]; then return 0; fi
+    local event="$1" reason="${2:--}" topic="${3:--}" target="${4:--}" cwd="${5:--}"
+    local f size
+    f="$(log_file)"
+    mkdir -p "$(dirname "$f")" 2>/dev/null || return 0
+    if [[ -f "$f" ]]; then
+        size="$(wc -c < "$f" 2>/dev/null || echo 0)"
+        if (( size >= 1048576 )); then mv -f "$f" "$f.1" 2>/dev/null || true; fi
+    fi
+    printf '{"ts":"%s","kind":"%s","event":"%s","reason":"%s","claude6":"%s","topic":"%s","target":"%s","cwd":"%s","tmux":%s}\n' \
+        "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$(json_escape "$KIND")" "$(json_escape "$event")" \
+        "$(json_escape "$reason")" "$(json_escape "$(compute_claude6)")" "$(json_escape "$topic")" \
+        "$(json_escape "$target")" "$(json_escape "$cwd")" "$([[ -n "${TMUX:-}" ]] && echo 1 || echo 0)" \
+        >> "$f" 2>/dev/null || true
+    return 0
+}
+
+cmd_log() {
+    local n=20
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --tail) n="$2"; shift 2 ;;
+            --path) log_file; echo; return 0 ;;
+            *) echo "$LABEL log: unknown arg '$1' (usage: log [--tail N] [--path])" >&2; return 2 ;;
+        esac
+    done
+    local f
+    f="$(log_file)"
+    if [[ ! -f "$f" ]]; then
+        echo "$LABEL log: no events recorded yet ($f)" >&2
+        return 1
+    fi
+    tail -n "$n" "$f"
+}
+
 # ---------- Usage ----------
 usage() {
     cat <<EOF
@@ -1301,6 +1373,12 @@ Subcommands (identical semantics to the codex wrapper's documentation):
   attach <window>
   rename <old-window> <new-topic>
   kill <window> | kill <%pane-id> | kill --mine | kill --orphaned
+  log [--tail N] [--path]
+      Show the last N (20) lifecycle events from the append-only JSONL event
+      log (spawn/reuse/relaunch/relocate, bind fallbacks with reasons, new
+      windows, kills; shared across kinds). --path prints the log location.
+      bind-*/new-window events are the audit trail when a cc-<kind> window
+      appears unexpectedly.
 
 Environment (generic; kind wrappers map their legacy names onto these):
   CC_AGENT_KIND           kind to drive (or pass --kind)
@@ -1316,6 +1394,9 @@ Environment (generic; kind wrappers map their legacy names onto these):
                           bottom 3 pane lines by 'wait'. Empty = stability-only)
   CC_AGENT_BUSY_REGEX     (default: profile's busy regex; while it matches the
                           bottom 15 lines, 'wait' treats the turn as running)
+  CC_AGENT_LOG            (default: 1; 0 disables the lifecycle event log)
+  CC_AGENT_LOG_FILE       (default: \$XDG_STATE_HOME|~/.local/state/
+                          tmux-agent/events.jsonl; rotated once at ~1MB)
 EOF
 }
 
@@ -1373,6 +1454,7 @@ main() {
         attach) cmd_attach "$@" ;;
         rename) cmd_rename "$@" ;;
         kill) cmd_kill "$@" ;;
+        log) cmd_log "$@" ;;
         _internal)
             local sub="${1:-}"
             shift || true

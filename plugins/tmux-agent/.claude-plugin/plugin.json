@@ -1,7 +1,7 @@
 {
   "name": "tmux-agent",
   "description": "Drive agent CLIs as visible tmux pane co-workers: reuse-by-default routing, keep-shell panes, named parallel workers, idle/blocked detection, per-agent calibration profiles (codex, claude) and a generic fallback for unknown CLIs.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "dependencies": [
     "tmux-core"
   ],

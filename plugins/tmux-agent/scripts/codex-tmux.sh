@@ -154,6 +154,12 @@ Subcommands:
       (--mine, matched by claude6), or every dead codex window/pane on the
       server (--orphaned). --mine and --orphaned are pane-aware.
 
+  log [--tail N] [--path]
+      Show recent lifecycle events (spawn/reuse/relaunch, bind fallbacks with
+      reasons, new windows, kills) from the shared JSONL event log; --path
+      prints its location. Disable with CC_AGENT_LOG=0; override the file with
+      CC_AGENT_LOG_FILE.
+
   exec [codex-exec flags...] <prompt>
       Run codex exec one-shot outside tmux (escape hatch).
 
@@ -194,7 +200,7 @@ main() {
         -h|--help|help)
             usage
             ;;
-        pane|panes|bind|new|prompt|wait|read|cancel|ls|find|attach|rename|kill|_internal)
+        pane|panes|bind|new|prompt|wait|read|cancel|ls|find|attach|rename|kill|log|_internal)
             map_env
             exec "$SCRIPT_DIR/agent-tmux.sh" --kind codex "$subcmd" "$@"
             ;;

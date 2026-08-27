@@ -99,6 +99,14 @@ hand-driving an unprofiled CLI — live in `references/interaction-recipes.md`.
 auth). `pane`/`bind` verify liveness with one auto-retry and surface the CLI's last
 output on stderr (exit 4). Never drive a target you haven't confirmed alive.
 
+**Event log (audit trail).** Every lifecycle decision — spawn/reuse/relaunch/relocate,
+each `bind` fallback with its reason, `new` windows, kills — appends one JSONL record
+to `~/.local/state/tmux-agent/events.jsonl` (shared across kinds; `CC_AGENT_LOG=0`
+disables, `CC_AGENT_LOG_FILE` overrides, rotated once at ~1MB). `log --tail 20` shows
+recent events; `log --path` prints the file. It is an audit trail only — live state
+stays in tmux options — but it answers "why did a `cc-<kind>` window appear?" after
+the fact: look for `bind-*` / `new-window` events and their reasons.
+
 ## States (keep-shell)
 
 | State | Meaning |
