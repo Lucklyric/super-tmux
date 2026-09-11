@@ -127,7 +127,7 @@ codex exec -m gpt-5.6-sol -s read-only \
   "Design an optimal algorithm for distributed consensus"
 ```
 
-**Default**: Already uses `xhigh` reasoning effort.
+**Default**: your codex config's reasoning effort — this example pins `xhigh` only for illustration.
 
 ---
 
@@ -249,7 +249,7 @@ codex exec -m gpt-5.6-sol -s workspace-write \
 **GPT-5.6-Sol** (default):
 - Architecture, design, analysis, code editing, implementation, refactoring
 - Long-horizon tasks with native context compaction
-- Default `-c model_reasoning_effort=xhigh`; escalate to `max`/`ultra` for the hardest problems
+- Effort defaults to your codex config; when asked, pin `xhigh` or escalate to `max`/`ultra` for the hardest problems
 
 **GPT-5.6-Terra** (balanced, cost-aware):
 - Everyday coding and moderate reviews at lower cost than sol
@@ -311,14 +311,14 @@ codex exec -p review "Analyze this code"
 
 ### 1. Pick the GPT-5.6 model + effort by task
 
-- **Default**: `gpt-5.6-sol` with xhigh reasoning (escalate to `max`/`ultra` for the hardest problems)
+- **Default**: your codex config's model and effort — pin only when asked. **Frontier**: `gpt-5.6-sol` with xhigh reasoning (escalate to `max`/`ultra` for the hardest problems)
 - **Cost-aware / everyday**: `gpt-5.6-terra` (high/xhigh)
 - **Speed**: `gpt-5.6-luna` and/or a lower effort; the `-fast` service tier (`gpt-5.6-sol-fast`) needs API-key auth
 
 ### 2. Use Safe Defaults, Override Intentionally
 
 - Default to `read-only` unless file writing is explicitly needed
-- Default to `xhigh` reasoning for all tasks (maximum capability)
+- Keep the model and effort from the codex config unless the user names one
 - Reduce reasoning effort only for simple, quick tasks
 
 ### 3. Combine Web Search with xhigh Reasoning

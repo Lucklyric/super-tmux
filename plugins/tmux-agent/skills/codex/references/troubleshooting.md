@@ -51,7 +51,7 @@ After authentication, retry the request.
 Error: Invalid model specified
 
 To fix:
-- Use 'gpt-5.6-sol' (default) — or 'gpt-5.6-terra'/'gpt-5.6-luna' for cost/speed
+- Drop the `-m` pin to use your codex config's model (the default) — or name 'gpt-5.6-sol' / 'gpt-5.6-terra' / 'gpt-5.6-luna' explicitly
 - '-fast' tiers (e.g. 'gpt-5.6-sol-fast') are API-key auth only
 
 Example: codex exec -m gpt-5.6-sol -s workspace-write \

@@ -156,7 +156,7 @@ Codex provides:
 - Detailed reasoning about trade-offs
 - Long-horizon planning for complex changes (native context compaction)
 
-**Note**: xhigh is the default reasoning effort for all Codex invocations. gpt-5.6-sol has native context compaction ideal for long-horizon refactoring tasks.
+**Note**: model and reasoning effort default to the user's codex config; the explicit `-m`/effort above are for illustration. gpt-5.6-sol has native context compaction ideal for long-horizon refactoring tasks.
 
 ---
 
@@ -171,7 +171,7 @@ Codex provides:
 | Complex refactoring | `gpt-5.6-sol` | `workspace-write` | xhigh | "Refactor auth system" |
 | Implementation | `gpt-5.6-sol` | `workspace-write` | xhigh | "Implement function Y" |
 
-**Note**: `gpt-5.6-sol` is the default model with native context compaction; default effort `xhigh` (escalate to `max`/`ultra` for the hardest problems, or pick `gpt-5.6-terra`/`gpt-5.6-luna` for cost/speed — see SKILL.md § Model and reasoning effort).
+**Note**: the default model and effort are the user's codex config — pin one only when asked (`gpt-5.6-sol` has native context compaction; escalate to `max`/`ultra` for the hardest problems, or pick `gpt-5.6-terra`/`gpt-5.6-luna` for cost/speed — see SKILL.md § Model and reasoning effort).
 
 ### Fallback Chain
 - **Model**: `gpt-5.6-sol` → `gpt-5.6-terra` / `gpt-5.6-luna` → `gpt-5.5` (CLI < 0.144.0). Do NOT fall back to `-fast` variants — they need API-key auth.

@@ -367,17 +367,41 @@ setup() {
         | grep -Fxq "codex-dead-aaaaaa-bb"
 }
 
-@test "exec: applies skill defaults when no overrides given" {
+@test "exec: passes no model/effort by default (codex uses its own config)" {
     CC_CODEX_BIN="$BATS_TEST_DIRNAME/fixtures/mock-codex-exec.sh" \
         run "$SCRIPT" exec "hello"
     [ "$status" -eq 0 ]
     [[ "$output" == *"exec"* ]]
-    [[ "$output" == *"-m"* ]]
-    [[ "$output" == *"gpt-5.6-sol"* ]]
-    [[ "$output" == *"-s"* ]]
     [[ "$output" == *"read-only"* ]]
-    [[ "$output" == *"model_reasoning_effort=xhigh"* ]]
     [[ "$output" == *"hello"* ]]
+    # mock prints one arg per line: no bare -m arg, no effort override.
+    run grep -cx -- '-m' <<<"$output"
+    [ "$output" = "0" ]
+    [[ "$(CC_CODEX_BIN="$BATS_TEST_DIRNAME/fixtures/mock-codex-exec.sh" "$SCRIPT" exec "hello")" != *"model_reasoning_effort"* ]]
+}
+
+@test "exec: CC_CODEX_MODEL / CC_CODEX_EFFORT inject flags only when set" {
+    CC_CODEX_MODEL="gpt-5.6-terra" CC_CODEX_EFFORT="max" \
+    CC_CODEX_BIN="$BATS_TEST_DIRNAME/fixtures/mock-codex-exec.sh" \
+        run "$SCRIPT" exec "hello"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"gpt-5.6-terra"* ]]
+    [[ "$output" == *"model_reasoning_effort=max"* ]]
+}
+
+@test "profile: idle regex matches any model's footer and rejects notices" {
+    # shellcheck source=/dev/null
+    source "$BATS_TEST_DIRNAME/../scripts/profiles/codex.sh"
+    local line
+    for line in '  gpt-6-astra medium · ~/codes/x' '  gpt-5.6-sol xhigh · /mock-cwd' \
+                '  gpt-5.5 high · /tmp' '  o4-mini · /tmp'; do
+        run grep -qE "$PROFILE_IDLE_REGEX" <<<"$line"
+        [ "$status" -eq 0 ]
+    done
+    for line in '⚠ 1 MCP startup issue · ctrl + t for details' '› Ask Codex to do anything'; do
+        run grep -qE "$PROFILE_IDLE_REGEX" <<<"$line"
+        [ "$status" -ne 0 ]
+    done
 }
 
 @test "exec: forwards arbitrary flags to codex exec" {

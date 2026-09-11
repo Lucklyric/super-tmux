@@ -631,7 +631,7 @@ Options:
 ## Model Support (v0.144.0+)
 
 **GPT-5.6 series** (requires codex CLI ≥ 0.144.0):
-- `gpt-5.6-sol` - Latest frontier agentic coding model (plugin default)
+- `gpt-5.6-sol` - Latest frontier agentic coding model
 - `gpt-5.6-terra` - Balanced agentic coding model for everyday work
 - `gpt-5.6-luna` - Fast & affordable agentic coding model
 - `gpt-5.6-<name>-fast` - Speed-tier variant (e.g. `gpt-5.6-sol-fast`) — API-key auth only
@@ -641,7 +641,7 @@ Options:
 - `low` - Fast responses with lighter reasoning
 - `medium` - Balances speed and reasoning depth for everyday tasks
 - `high` - Greater reasoning depth for complex problems
-- `xhigh` - Extra-high reasoning (plugin default)
+- `xhigh` - Extra-high reasoning
 - `max` - Maximum reasoning depth for the hardest problems (5.6 series)
 - `ultra` - Maximum reasoning with automatic task delegation (`gpt-5.6-sol`/`gpt-5.6-terra` only)
 

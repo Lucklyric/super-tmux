@@ -41,8 +41,10 @@ map_env() {
 }
 
 cmd_exec() {
-    # Pass through all args to `codex exec`, but inject defaults if the caller
-    # didn't specify them.
+    # Pass through all args to `codex exec`. Model and effort are injected ONLY
+    # when explicitly requested (CC_CODEX_MODEL / CC_CODEX_EFFORT) and the caller
+    # didn't pass them; otherwise codex uses the user's own config. The
+    # read-only sandbox stays a safety default.
     local has_m=0 has_s=0 has_effort=0
     for a in "$@"; do
         case "$a" in
@@ -53,9 +55,9 @@ cmd_exec() {
     done
 
     local cmd=( "$CODEX_BIN" exec )
-    (( has_m )) || cmd+=( -m "$CODEX_MODEL" )
+    (( has_m )) || [[ -z "$CODEX_MODEL" ]] || cmd+=( -m "$CODEX_MODEL" )
     (( has_s )) || cmd+=( -s read-only )
-    (( has_effort )) || cmd+=( -c "model_reasoning_effort=$CODEX_EFFORT" )
+    (( has_effort )) || [[ -z "$CODEX_EFFORT" ]] || cmd+=( -c "model_reasoning_effort=$CODEX_EFFORT" )
     cmd+=( "$@" )
 
     exec "${cmd[@]}"
@@ -119,7 +121,7 @@ Subcommands:
   wait [--target T|--topic SLUG] [--timeout SECS] [--activity-timeout SECS]
       Block until codex's turn settles: after a `prompt`, first requires pane
       activity (exit 8 = stalled if none), then a stable pane showing the
-      idle status line (gpt-5.x · path) at the bottom. Standalone `wait`
+      idle status line ("<model> <effort> · <cwd>") at the bottom. Standalone `wait`
       answers "is it idle now?". Prints "idle", exit 0; 5 = timeout,
       6 = no target, 9 = codex exited (kept shell).
 
@@ -168,10 +170,11 @@ Subcommands:
 Environment:
   CC_CODEX_SESSION_NAME  (default: cc-codex)
   CC_CODEX_BIN           (default: codex)
-  CC_CODEX_MODEL         (default: gpt-5.6-sol; e.g. gpt-5.6-terra, gpt-5.6-luna,
-                          or gpt-5.5 on a codex CLI < 0.144.0)
-  CC_CODEX_EFFORT        (default: xhigh; ladder low<medium<high<xhigh<max<ultra —
-                          max/ultra are 5.6-series; ultra is sol/terra only)
+  CC_CODEX_MODEL         (default: unset — codex uses the `model` in your own
+                          ~/.codex/config.toml; set it only when a specific model
+                          is wanted, e.g. gpt-6-astra, gpt-5.6-sol, gpt-5.6-terra)
+  CC_CODEX_EFFORT        (default: unset — your config's model_reasoning_effort;
+                          ladder low<medium<high<xhigh<max<ultra)
   CC_CODEX_KEEP_SHELL    (default: 1 — when codex exits, the pane drops into an
                           interactive shell and stays for manual use; `exit`
                           closes it. 0 = legacy: codex exit closes the pane per

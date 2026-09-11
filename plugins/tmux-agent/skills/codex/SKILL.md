@@ -5,7 +5,7 @@ description: This skill should be used whenever the user names codex as the acto
 
 # Codex: High-Reasoning AI Assistant for Claude Code
 
-Use OpenAI's Codex CLI (GPT-5.6 series — default `gpt-5.6-sol`, `xhigh` reasoning) for complex coding, architecture, and review work that benefits from a frontier reasoning model. Pick the 5.6 model + effort by task (see "Model and reasoning effort"). Requires codex CLI **≥ 0.144.0** for the 5.6 series.
+Use OpenAI's Codex CLI for complex coding, architecture, and review work that benefits from a frontier reasoning model. **Codex runs on the user's own CLI config** (`~/.codex/config.toml` → `model`, `model_reasoning_effort`); pass a model or effort only when the user names one (see "Model and reasoning effort").
 
 **Default mode is tmux.** Codex runs in a long-lived attachable tmux pane/window — a co-worker at the user's side — so the user can watch, intervene, and iterate. The helper script handles the whole loop: lifecycle (`pane` / `panes` / `bind` / `new` / `ls` / `kill`) **and the driving verbs** (`prompt` / `wait` / `read --delta` / `cancel`) — send, settle-detection, and delta extraction are script commands with clean exit codes, not hand-rolled tmux loops. A `codex exec` escape hatch exists but is gated: use it only when the user explicitly asked for headless, or after confirming (see "Codex is a co-worker in a pane").
 
@@ -217,7 +217,7 @@ The script keeps `send` and `capture` as recognized keywords ONLY to print a mig
 
 ## Driving verbs (the interaction surface)
 
-The whole loop — baseline, atomic send, two-phase settle detection, delta extraction — is script commands. Calibration (the `gpt-5\.[0-9].*·` idle regex, bottom-of-pane anchoring, deadlines) lives inside the verbs via the codex profile; you don't hand-roll it.
+The whole loop — baseline, atomic send, two-phase settle detection, delta extraction — is script commands. Calibration (the model-agnostic idle-footer regex, bottom-of-pane anchoring, deadlines) lives inside the verbs via the codex profile; you don't hand-roll it.
 
 ```bash
 # $CODEX = the literal helper path from "Default workflow"; re-state it in each Bash call.
@@ -232,7 +232,7 @@ $CODEX prompt --wait --file "$PROMPT_FILE"
 
 # Split form — send now, settle later (e.g. while driving another pane):
 $CODEX prompt -- "<prompt>"
-$CODEX wait --timeout 900        # xhigh can think for minutes; be generous
+$CODEX wait --timeout 900        # high reasoning effort can think for minutes; be generous
 
 # wait exit codes — handle each distinctly:
 #   0 idle (turn finished)      5 timeout (still running — wait again or read)
@@ -343,25 +343,25 @@ The skill still defaults to read-only sandbox; switch to `--full-auto` only when
 
 ## Model and reasoning effort
 
-**Defaults: model `gpt-5.6-sol`, reasoning effort `xhigh`.** The script pins BOTH at every codex it starts — `pane`/`bind`/`new` spawns and `exec` one-shots all pass `-m gpt-5.6-sol -c model_reasoning_effort=xhigh` (this changed in v3.7.0: spawns used to inherit the model from your codex config; they now pin it). Override via env: `CC_CODEX_MODEL` and `CC_CODEX_EFFORT` (e.g. `CC_CODEX_MODEL=gpt-5.5` on a codex CLI older than 0.144.0, which cannot run the 5.6 series). The one exception is `codex review`, which bypasses the helper (see "Delegating a code review").
+**Default: the user's own codex config.** The script passes NO `-m` and NO `model_reasoning_effort` unless one is explicitly requested, so every `pane`/`bind`/`new` spawn and `exec` one-shot runs whatever `~/.codex/config.toml` sets (`model`, `model_reasoning_effort`) — the same policy as the claude kind. **Only when the user names a model or effort** ("use gpt-5.6-sol", "max effort", "make it fast") set `CC_CODEX_MODEL` / `CC_CODEX_EFFORT` for that spawn. Don't pick one on the user's behalf because a task looks hard or easy — suggest a combination below and let them choose. (Before 1.4.0 the plugin pinned `gpt-5.6-sol` + `xhigh` over the config; panes started then keep running it until killed.) `codex review` bypasses the helper and uses the config's `review_model` (see "Delegating a code review").
 
 ### The GPT-5.6 series (requires codex CLI ≥ 0.144.0)
 
 | Model | Role | Effort ladder | When |
 |---|---|---|---|
-| `gpt-5.6-sol` (default) | Frontier agentic coding | low · medium · high · xhigh · **max** · **ultra** | Hard reasoning, architecture, deep debugging, tricky refactors. |
+| `gpt-5.6-sol` | Frontier agentic coding | low · medium · high · xhigh · **max** · **ultra** | Hard reasoning, architecture, deep debugging, tricky refactors. |
 | `gpt-5.6-terra` | Balanced everyday | low · medium · high · xhigh · **max** · **ultra** | Standard coding/review at lower cost than sol. |
 | `gpt-5.6-luna` | Fast & affordable | low · medium · high · xhigh · **max** | Quick edits, simple lookups, high-volume/cheap work (no `ultra`). |
 
-Reasoning effort ladder: **low < medium < high < xhigh < max < ultra**. `xhigh` is the default strong setting; `max` = "maximum reasoning depth for the hardest problems", `ultra` = "maximum reasoning with automatic task delegation" (sol/terra only). `max`/`ultra` are slower and costlier — escalate to them deliberately, don't default there.
+Reasoning effort ladder: **low < medium < high < xhigh < max < ultra**. `xhigh` is the usual strong setting; `max` = "maximum reasoning depth for the hardest problems", `ultra` = "maximum reasoning with automatic task delegation" (sol/terra only). `max`/`ultra` are slower and costlier — escalate to them deliberately, don't default there.
 
-### Pick the model + effort by task
+### When the user asks for a specific model or effort
 
-Choose a 5.6-series combination that fits the task instead of always using the default:
+Map their words to a combination — only on request; otherwise pass nothing:
 
 | Task | Suggested combination |
 |---|---|
-| Default / anything unclear | `gpt-5.6-sol` + `xhigh` |
+| User named nothing (default) | pass nothing — codex uses its config |
 | The hardest problems (gnarly architecture, deep multi-file debugging) | `gpt-5.6-sol` + `max`, or `ultra` for the very hardest |
 | Everyday coding, moderate reviews (cost-aware) | `gpt-5.6-terra` + `high`/`xhigh` |
 | Quick edits, simple questions, high volume | `gpt-5.6-luna` + `medium`/`high` |
@@ -370,7 +370,7 @@ Choose a 5.6-series combination that fits the task instead of always using the d
 To use a non-default combination for a task, set the env vars when resolving the target, e.g.:
 
 ```bash
-CC_CODEX_EFFORT=max   "$CODEX" pane --cwd "$PWD"   # sol + max
+CC_CODEX_EFFORT=max   "$CODEX" pane --cwd "$PWD"   # config model + max effort
 CC_CODEX_MODEL=gpt-5.6-luna CC_CODEX_EFFORT=medium \
     "$CODEX" exec "quick one-off question"
 ```
@@ -379,7 +379,7 @@ CC_CODEX_MODEL=gpt-5.6-luna CC_CODEX_EFFORT=medium \
 
 **Auth note:** ChatGPT-account auth now runs the base 5.6 slugs (`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`) and `gpt-5.5`. The `-fast` service-tier variants (e.g. `gpt-5.6-sol-fast`) require API-key auth — under a ChatGPT account they return HTTP 400 "not supported".
 
-**Fallback chain**: model `gpt-5.6-sol` → `gpt-5.6-terra`/`gpt-5.6-luna` → `gpt-5.5` (older CLI); effort `xhigh` → `high` → `medium`.
+**If a pinned model fails** (e.g. an older CLI rejects it): drop the pin first — the config default is the fallback; otherwise `gpt-5.6-sol` → `gpt-5.6-terra`/`gpt-5.6-luna` → `gpt-5.5` (older CLI); effort `xhigh` → `high` → `medium`.
 
 ## Delegating a code review (`codex review`)
 
@@ -432,13 +432,13 @@ Interaction failures mostly surface as `wait` exit codes: 5 = still running (wai
 - The **`tmux-agent` skill** is the canonical home for generic agentic-tmux concepts and the full recipe catalog — identity & naming patterns, kinds & profiles, send/capture/idle-detect (incl. why two-phase), sync/locking, scrollback semantics, and lifecycle/cleanup. This skill links to it for background; see the **tmux-agent skill's own** `references/interaction-recipes.md`, `references/model-and-identity.md`, and `references/sync-and-lifecycle.md` (in `skills/tmux-agent/references/`, not this skill's references/). Read it when you need the *why* behind a recipe. Daily tmux fundamentals (session/window/pane model, layouts, copy-mode) live in the `tmux` skill of the **tmux-core** plugin.
 
 **Canonical (codex-specific tmux workflow):**
-- `references/tmux-mode.md` — **canonical for codex** — codex-specific calibration (model-agnostic `gpt-5\.[0-9].*·` `IDLE_REGEX`), the `pane` (default) / `panes` (detection) / `bind` (fallback) workflow, multi-pane topics, the raw recipe forms behind the `prompt`/`wait`/`read`/`cancel` verbs (calibration + debugging), hooks-review handling, sandbox flags. Generic theory is delegated to the `tmux-agent` skill.
+- `references/tmux-mode.md` — **canonical for codex** — codex-specific calibration (the model-agnostic idle-footer `IDLE_REGEX`), the `pane` (default) / `panes` (detection) / `bind` (fallback) workflow, multi-pane topics, the raw recipe forms behind the `prompt`/`wait`/`read`/`cancel` verbs (calibration + debugging), hooks-review handling, sandbox flags. Generic theory is delegated to the `tmux-agent` skill.
 - `references/cli-features.md` — CLI flag table, interactive-vs-exec differences, `codex review` and `codex apply`.
 - `references/codex-config.md` — every `-c` key with type and default.
 - `references/codex-help.md` — raw `--help` output.
 - `references/file-context.md` — passing files, directories, and the `@` syntax.
 
-**Legacy (`exec`-mode escape hatch only):**
+**Legacy (`exec`-mode escape hatch only):** their example commands pin `-m gpt-5.6-sol` / `model_reasoning_effort=xhigh` for illustration — drop both unless the user named a model or effort.
 - `references/session-workflows.md` — `codex exec resume` continuation rules and session-ID tracking.
 - `references/examples.md` — `codex exec` examples by use case.
 - `references/command-patterns.md` — `codex exec` invocation templates.

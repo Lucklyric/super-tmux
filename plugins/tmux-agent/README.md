@@ -14,6 +14,9 @@ pane co-workers** beside Claude Code:
 - **Kinds via profiles**: codex (full depth) and claude (Claude Code CLI)
   ship as ~50-line calibration profiles over one generic engine; unknown CLIs
   calibrate from their own pane.
+- **Your CLI config wins**: model and reasoning effort come from each CLI's
+  own config (`~/.codex/config.toml`, Claude Code settings) unless you name
+  one per spawn (`CC_CODEX_MODEL` / `CC_CODEX_EFFORT` / `CC_AGENT_MODEL`).
 - **Deterministic triggering**: a UserPromptSubmit hook nudges the right
   skill when a prompt names an agent.
 - **Session re-sync**: `/tmux-agent:refresh` re-reads the contract, resolves

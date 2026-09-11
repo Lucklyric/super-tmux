@@ -202,17 +202,17 @@ teardown() {
     [[ "$output" == *"exited immediately"* ]]
 }
 
-@test "pane: passes default codex flags (model, read-only sandbox, policy, effort)" {
+@test "pane: passes sandbox + policy but no model/effort by default (codex config)" {
     local cwd; cwd="$(mktemp -d)"
     CC_CODEX_BIN="$BATS_TEST_DIRNAME/fixtures/mock-codex-logargs.sh" \
         run "$SCRIPT" pane --cwd "$cwd"
     [ "$status" -eq 0 ]
     sleep 0.3
     local argv; argv="$(cat "$cwd/mock-codex-argv.log")"
-    [[ "$argv" == *"-m gpt-5.6-sol"* ]]
+    [[ "$argv" != *"-m "* ]]
     [[ "$argv" == *"-s read-only"* ]]
     [[ "$argv" == *"approval_policy=on-request"* ]]
-    [[ "$argv" == *"model_reasoning_effort=xhigh"* ]]
+    [[ "$argv" != *"model_reasoning_effort"* ]]
     [[ "$argv" != *"network_access=true"* ]]
     rm -rf "$cwd"
 }

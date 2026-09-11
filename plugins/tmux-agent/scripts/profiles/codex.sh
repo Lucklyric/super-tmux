@@ -5,8 +5,9 @@
 # Profile contract — every profile defines:
 #   PROFILE_TITLE          display name used in success messages ("Codex pane %s ...")
 #   PROFILE_BIN_DEFAULT    binary launched when CC_AGENT_BIN is unset
-#   PROFILE_MODEL_DEFAULT  model pinned at every spawn (CC_AGENT_MODEL overrides)
-#   PROFILE_EFFORT_DEFAULT reasoning effort pinned at every spawn
+#   PROFILE_MODEL_DEFAULT  model passed at every spawn (CC_AGENT_MODEL overrides);
+#                          empty = omit the flag and inherit the CLI's own config
+#   PROFILE_EFFORT_DEFAULT reasoning effort passed at every spawn; empty = inherit
 #   PROFILE_ENV_PREFIX     legacy env-var prefix shown in user-facing messages
 #   PROFILE_RESUME_CMD     command a human types in the kept shell to continue
 #                          the previous conversation (keep-shell hint text)
@@ -24,12 +25,12 @@
 
 PROFILE_TITLE="Codex"
 PROFILE_BIN_DEFAULT="codex"
-# gpt-5.6-sol requires codex CLI >= 0.144.0; on older CLIs users set
-# CC_CODEX_MODEL=gpt-5.5. Other 5.6 slugs: gpt-5.6-terra (balanced),
-# gpt-5.6-luna (fast). Effort ladder: low<medium<high<xhigh<max<ultra
-# (max/ultra are 5.6-series; ultra is sol/terra only).
-PROFILE_MODEL_DEFAULT="gpt-5.6-sol"
-PROFILE_EFFORT_DEFAULT="xhigh"
+# Empty = inherit the user's own codex config (~/.codex/config.toml `model` and
+# `model_reasoning_effort`): -m / model_reasoning_effort are passed ONLY when a
+# model or effort is explicitly requested via CC_CODEX_MODEL / CC_CODEX_EFFORT.
+# Same policy as the claude profile.
+PROFILE_MODEL_DEFAULT=""
+PROFILE_EFFORT_DEFAULT=""
 PROFILE_ENV_PREFIX="CC_CODEX"
 PROFILE_RESUME_CMD="codex resume --last"
 PROFILE_LOGIN_HINT="codex login"
@@ -42,23 +43,25 @@ PROFILE_APPROVAL_DEFAULT="on-request"
 # all and continue"). Auth gate: "Not authenticated" → PROFILE_LOGIN_HINT.
 # Consumed by the skill recipes (tmux-mode.md) and T5's blocked-state work.
 PROFILE_FIRST_RUN_GATE='Hooks need review -> send "2" Enter (Trust all and continue)'
-# Model-agnostic across the 5.x slugs; anchored to the middot before the cwd
-# path in the status line ("gpt-5.6-sol xhigh · /path"). No script consumer
-# yet: T2's `wait` verb reads it; until T6 migrates the docs, the skill
-# references still carry their own copy of the same regex.
-PROFILE_IDLE_REGEX='gpt-5\.[0-9].*·'
+# Model-agnostic: codex's idle footer is "<model> [<effort>] · <cwd>" whatever
+# model the user's config selects — "gpt-6-astra medium · ~/x", "gpt-5.6-sol
+# xhigh · /x", "o4-mini · /x" (verified live on codex 0.154.0). Anchored to ONE
+# model token, an optional lowercase effort word, then the middot, so notices
+# that also carry "·" ("⚠ 1 MCP startup issue · ctrl + t") never match.
+# POSIX ERE: `wait` applies it with `grep -E` to the bottom 3 pane lines.
+PROFILE_IDLE_REGEX='^[[:space:]]*[^[:space:]]+( [a-z]+)? · '
 PROFILE_VERSION_FLOOR="0.144.0"
 
 agent_compose_cmd() {
     local sandbox="$1" approval="$2"
-    AGENT_CMD=(
-        "$AGENT_BIN"
-        -m "$AGENT_MODEL"
-        -c "approval_policy=$approval"
-        -c "model_reasoning_effort=$AGENT_EFFORT"
-        -s "$sandbox"
-    )
+    AGENT_CMD=( "$AGENT_BIN" )
+    # Model/effort only when explicitly requested; otherwise codex's own config.
+    [[ -n "$AGENT_MODEL" ]] && AGENT_CMD+=( -m "$AGENT_MODEL" )
+    AGENT_CMD+=( -c "approval_policy=$approval" )
+    [[ -n "$AGENT_EFFORT" ]] && AGENT_CMD+=( -c "model_reasoning_effort=$AGENT_EFFORT" )
+    AGENT_CMD+=( -s "$sandbox" )
     if [[ "$sandbox" == "workspace-write" ]]; then
         AGENT_CMD+=( -c "sandbox_workspace_write.network_access=true" )
     fi
+    return 0
 }

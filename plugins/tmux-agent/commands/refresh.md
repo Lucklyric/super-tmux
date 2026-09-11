@@ -122,8 +122,9 @@ Classify every hit against the contract in step 2:
 
 - **Conflict** — instructs an older route: `exec`/headless as the default, a
   `cc-codex` window as the default target, `spawn`/`send`/`capture` verbs, the
-  retired `codex@cc-dev-tools` plugin or `plugins/codex/...` paths, a model pin
-  older than `gpt-5.6-sol`.
+  retired `codex@cc-dev-tools` plugin or `plugins/codex/...` paths, or any
+  instruction to pin a codex/claude model or effort by default (the contract:
+  inherit the CLI's own config unless the user names one).
 - **Stale but harmless** — historical notes, changelogs, spec files describing
   past versions.
 - **Fine** — matches the current contract.

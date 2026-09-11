@@ -84,7 +84,7 @@ TARGET="cc-codex:$WIN"
 # 2) Wait for codex to be input-ready (only needed right after creation;
 #    a reused alive window is already idle). Bound the wait so a dead/empty
 #    target can't spin forever (mirrors the detect-idle deadline).
-IDLE_REGEX='gpt-5\.[0-9].*·'   # model-agnostic: sol/terra/luna/5.5
+IDLE_REGEX='^[[:space:]]*[^[:space:]]+( [a-z]+)? · '   # any model: "<model> [<effort>] · <cwd>"
 RDY_DEADLINE=$(( $(date +%s) + 30 ))
 until tmux capture-pane -t "$TARGET" -p -S -200 | tail -3 | grep -qE "$IDLE_REGEX"; do
     (( $(date +%s) > RDY_DEADLINE )) && { echo "codex not ready after 30s (dead pane?)"; break; }
@@ -180,10 +180,10 @@ Why the Write tool and not a heredoc: a `<<'EOF'` heredoc silently truncates if 
 
 The **recheck strategy** — Claude must actively poll; there is no auto-notification when codex finishes. Two phases: activity-wait, then stability. (Why two phases — the status line is present both before send and after completion, so a stability-only loop false-positives on the pre-send pane — is explained in full in the `tmux-agent` skill's `references/interaction-recipes.md` § detect-idle.)
 
-**Codex calibration.** For codex 0.144+ the idle status line looks like `gpt-5.6-sol xhigh · /path/to/cwd`, so anchor the regex to the middot before the cwd path. Keep it model-agnostic (`gpt-5\.[0-9]`) so it matches whichever 5.6 slug (sol/terra/luna) or `gpt-5.5` override is running:
+**Codex calibration.** The idle status line is `<model> [<effort>] · <cwd>` — e.g. `gpt-6-astra medium · ~/proj` on a config default, `gpt-5.6-sol xhigh · /proj` when pinned. The model comes from the user's config, so the regex must not name one: anchor on a single model token, an optional lowercase effort word, then the middot — which also rejects notices such as `⚠ 1 MCP startup issue · ctrl + t`:
 
 ```bash
-IDLE_REGEX='gpt-5\.[0-9].*·'   # model-agnostic: sol/terra/luna/5.5
+IDLE_REGEX='^[[:space:]]*[^[:space:]]+( [a-z]+)? · '   # any model: "<model> [<effort>] · <cwd>"
 ```
 
 Anchor to the ` · /path` status line, not just the model name, because the model name can appear in response text. Run `tmux capture-pane -t "$TARGET" -p | tail -5` while codex is idle to confirm what your CLI version prints, and update the regex if the status line changed.
@@ -244,7 +244,7 @@ BASELINE=$(tmux capture-pane -t "$TARGET" -p -S -200)
 PREV=""; STABLE=0; DEADLINE=$(( $(date +%s) + 30 ))
 while (( $(date +%s) < DEADLINE )); do
     BUF=$(tmux capture-pane -t "$TARGET" -p -S -200)
-    if [[ "$BUF" == "$PREV" ]] && printf '%s\n' "$BUF" | tail -3 | grep -qE 'gpt-5\.[0-9].*·'; then
+    if [[ "$BUF" == "$PREV" ]] && printf '%s\n' "$BUF" | tail -3 | grep -qE '^[[:space:]]*[^[:space:]]+( [a-z]+)? · '; then
         STABLE=$(( STABLE + 1 )); (( STABLE >= 2 )) && break
     else STABLE=0; fi
     PREV="$BUF"; sleep 0.5

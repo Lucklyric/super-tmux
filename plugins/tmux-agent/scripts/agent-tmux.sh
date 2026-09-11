@@ -374,9 +374,9 @@ cmd_bind() {
             local existing_model existing_effort
             existing_model="$(tmux show-option -wqv -t "$SESSION_NAME:$window" "@${OPT_PREFIX}_model" 2>/dev/null)"
             existing_effort="$(tmux show-option -wqv -t "$SESSION_NAME:$window" "@${OPT_PREFIX}_effort" 2>/dev/null)"
-            if { [[ -n "${CC_AGENT_MODEL+x}" && -n "$existing_model" && "$AGENT_MODEL" != "$existing_model" ]]; } \
-                || { [[ -n "${CC_AGENT_EFFORT+x}" && -n "$existing_effort" && "$AGENT_EFFORT" != "$existing_effort" ]]; }; then
-                echo "$LABEL bind: reusing window '$window' (model '${existing_model:-?}', effort '${existing_effort:-?}'); ${ENV_PREFIX}_MODEL/${ENV_PREFIX}_EFFORT do NOT apply to a reused window. Kill and re-bind to switch ($LABEL.sh kill $window && $LABEL.sh bind)." >&2
+            if { [[ -n "${CC_AGENT_MODEL+x}" && "$AGENT_MODEL" != "$existing_model" ]]; } \
+                || { [[ -n "${CC_AGENT_EFFORT+x}" && "$AGENT_EFFORT" != "$existing_effort" ]]; }; then
+                echo "$LABEL bind: reusing window '$window' (model '${existing_model:-CLI default}', effort '${existing_effort:-CLI default}'); ${ENV_PREFIX}_MODEL/${ENV_PREFIX}_EFFORT do NOT apply to a reused window. Kill and re-bind to switch ($LABEL.sh kill $window && $LABEL.sh bind)." >&2
             fi
             log_event bind-reuse alive - "$window" "$cwd"
             echo "$window"
@@ -644,9 +644,9 @@ cmd_pane() {
                 local existing_model existing_effort
                 existing_model="$(tmux show-option -p -qv -t "$pane" "@${OPT_PREFIX}_model" 2>/dev/null || true)"
                 existing_effort="$(tmux show-option -p -qv -t "$pane" "@${OPT_PREFIX}_effort" 2>/dev/null || true)"
-                if { [[ -n "${CC_AGENT_MODEL+x}" && -n "$existing_model" && "$AGENT_MODEL" != "$existing_model" ]]; } \
-                    || { [[ -n "${CC_AGENT_EFFORT+x}" && -n "$existing_effort" && "$AGENT_EFFORT" != "$existing_effort" ]]; }; then
-                    echo "$LABEL pane: reusing pane '$pane' (model '${existing_model:-?}', effort '${existing_effort:-?}'); ${ENV_PREFIX}_MODEL/${ENV_PREFIX}_EFFORT do NOT apply to a reused pane. Kill and re-create to switch ($LABEL.sh kill $pane && $LABEL.sh pane$topic_flag)." >&2
+                if { [[ -n "${CC_AGENT_MODEL+x}" && "$AGENT_MODEL" != "$existing_model" ]]; } \
+                    || { [[ -n "${CC_AGENT_EFFORT+x}" && "$AGENT_EFFORT" != "$existing_effort" ]]; }; then
+                    echo "$LABEL pane: reusing pane '$pane' (model '${existing_model:-CLI default}', effort '${existing_effort:-CLI default}'); ${ENV_PREFIX}_MODEL/${ENV_PREFIX}_EFFORT do NOT apply to a reused pane. Kill and re-create to switch ($LABEL.sh kill $pane && $LABEL.sh pane$topic_flag)." >&2
                 fi
                 log_event reuse alive "$topic" "$pane" "$cwd"
                 echo "$pane"
@@ -1424,8 +1424,8 @@ Environment (generic; kind wrappers map their legacy names onto these):
   CC_AGENT_KIND           kind to drive (or pass --kind)
   CC_AGENT_SESSION_NAME   (default: cc-<kind>)
   CC_AGENT_BIN            (default: profile's binary)
-  CC_AGENT_MODEL          (default: profile's model)
-  CC_AGENT_EFFORT         (default: profile's effort)
+  CC_AGENT_MODEL          (default: profile's model; empty = the CLI's own config)
+  CC_AGENT_EFFORT         (default: profile's effort; empty = the CLI's own config)
   CC_AGENT_KEEP_SHELL     (default: 1)
   CC_AGENT_EXIT_SHELL     (default: \$SHELL)
   CC_AGENT_REMAIN_ON_EXIT (default: failed)
