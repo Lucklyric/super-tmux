@@ -31,7 +31,7 @@ $ENGINE --kind claude read --delta
 | Reasoning effort | none — Claude Code has no effort flag |
 | Sandbox mapping | `--read-only` (default) = normal permission mode, every edit approved in the pane; `--full-auto` = `--permission-mode acceptEdits` |
 | Idle detection | **No reliable idle marker** — the idle footer is user-configurable (custom statuslines, vim mode). `wait` uses stability + the universal **busy marker `esc to interrupt`** (shown near the input box while a turn runs). |
-| First-run gates | Theme picker on the very first launch; per-directory trust prompt — *"Do you trust the files in this folder?"* → send `Enter` to accept |
+| First-run gates | Theme picker on the very first launch; per-directory trust prompt (*"Quick safety check: Is this a project you created or one you trust?"*) — the `❯` cursor starts on **`No, exit`**, so a bare `Enter` quits the CLI: send `Down`, confirm `❯` is on `Yes, I trust this folder`, then `Enter` |
 | Auth gate | run `claude /login` inside the pane |
 | Resume (kept shell) | `claude --continue` |
 | File include | `@path` in the prompt |

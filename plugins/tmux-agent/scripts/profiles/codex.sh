@@ -14,6 +14,8 @@
 #   PROFILE_LOGIN_HINT     auth command suggested when the CLI dies at launch
 #   PROFILE_IDLE_REGEX     input-ready status-line regex (consumed by the skill
 #                          recipes today; the `wait` verb in a later ticket)
+#   PROFILE_POPUP_REGEX    (optional) completion-popup marker; `prompt` sends
+#                          Escape before Enter while it shows
 #   PROFILE_VERSION_FLOOR  minimum CLI version these defaults assume
 #   agent_compose_cmd SANDBOX APPROVAL
 #                          append the full launch argv to the AGENT_CMD array,
@@ -50,6 +52,9 @@ PROFILE_FIRST_RUN_GATE='Hooks need review -> send "2" Enter (Trust all and conti
 # that also carry "·" ("⚠ 1 MCP startup issue · ctrl + t") never match.
 # POSIX ERE: `wait` applies it with `grep -E` to the bottom 3 pane lines.
 PROFILE_IDLE_REGEX='^[[:space:]]*[^[:space:]]+( [a-z]+)? · '
+# `$skill` mention popup ("Press enter to insert or esc to close", also shown
+# as "no matches"): Enter would insert the mention instead of submitting.
+PROFILE_POPUP_REGEX='Press enter to insert or esc to close'
 PROFILE_VERSION_FLOOR="0.144.0"
 
 agent_compose_cmd() {

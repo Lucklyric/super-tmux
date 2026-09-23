@@ -41,6 +41,10 @@ init_globals() {
     # whose idle footer is user-configurable (Claude Code statuslines), a
     # universal busy marker ("esc to interrupt") beats any idle marker.
     BUSY_REGEX="${CC_AGENT_BUSY_REGEX:-${PROFILE_BUSY_REGEX:-}}"
+    # Completion-popup marker: when the typed prompt leaves a popup open (codex
+    # `$skill` mentions), Enter would be consumed by the popup instead of
+    # submitting. `prompt` sends Escape first; `wait` reports it as stalled.
+    POPUP_REGEX="${PROFILE_POPUP_REGEX:-}"
     readonly SESSION_NAME="${CC_AGENT_SESSION_NAME:-cc-$KIND}"
     readonly AGENT_BIN="${CC_AGENT_BIN:-${PROFILE_BIN_DEFAULT:-$KIND}}"
     # How the pane/window behaves when its ROOT process exits. With keep-shell
@@ -1054,6 +1058,19 @@ capture_full() { tmux capture-pane -t "$1" -p -S - 2>/dev/null; }
 
 buf_hash() { printf '%s' "$1" | cksum; }
 
+# Strip braille glyphs (U+2800–U+28FF): codex animates its idle prompt line
+# with them, so a raw capture never settles. Byte-level (UTF-8 E2 A0-A3 xx).
+strip_anim() { LC_ALL=C sed $'s/\xe2[\xa0-\xa3][\x80-\xbf]//g'; }
+
+popup_open() {
+    [[ -n "$POPUP_REGEX" ]] || return 1
+    # Visible screen only; the popup's hint line sits at the bottom, where the
+    # idle footer would be. $(...) drops the pane's trailing blank rows.
+    local buf
+    buf="$(tmux capture-pane -t "$1" -p 2>/dev/null)"
+    printf '%s\n' "$buf" | tail -3 | grep -qE "$POPUP_REGEX"
+}
+
 # Escape a string for inclusion in a JSON double-quoted value.
 json_escape() {
     local s="$1"
@@ -1067,7 +1084,8 @@ json_escape() {
 # Uses the @<opt>_basehash recorded by `prompt` for the activity phase (skipped
 # when absent — a standalone `wait` just asks "is it idle now?"), then requires
 # the buffer stable over consecutive polls AND the idle regex at the bottom of
-# the pane. Exit: 0 idle, 5 timeout, 8 stalled (no activity), 9 agent exited.
+# the pane. Exit: 0 idle, 5 timeout, 8 stalled (no activity, or the prompt
+# still in the input box), 9 agent exited.
 wait_impl() {
     local target="$1" timeout="$2" activity_timeout="$3"
     local basehash buf state
@@ -1105,12 +1123,16 @@ wait_impl() {
             gone|unknown) echo "$LABEL wait: target '$target' not found" >&2; return 6 ;;
             shell|dead) echo "$LABEL wait: $KIND exited (state $state)" >&2; return 9 ;;
         esac
-        buf="$(tmux capture-pane -t "$target" -p -S -200 2>/dev/null || true)"
+        buf="$(tmux capture-pane -t "$target" -p -S -200 2>/dev/null | strip_anim || true)"
         if [[ -n "$BUSY_REGEX" ]] && printf '%s\n' "$buf" | tail -15 | grep -qE "$BUSY_REGEX"; then
             # Busy marker on screen: the turn is still running even if the
             # buffer looks momentarily stable.
             stable=0
         elif [[ -n "$buf" && "$buf" == "$prev" ]]; then
+            if popup_open "$target"; then
+                echo "$LABEL wait: stalled — the prompt is still in the input box (completion popup open)" >&2
+                return 8
+            fi
             if [[ -z "$IDLE_REGEX" ]] || printf '%s\n' "$buf" | tail -3 | grep -qE "$IDLE_REGEX"; then
                 stable=$(( stable + 1 ))
                 if (( stable >= need )); then
@@ -1209,6 +1231,11 @@ cmd_prompt() {
     tmux send-keys -t "$t" -l -- "$msg" 2>/dev/null \
         || { echo "$LABEL prompt: send-keys to '$t' failed" >&2; return 6; }
     sleep 0.3
+    # A completion popup (e.g. codex `$skill` mention) would swallow Enter.
+    if popup_open "$t"; then
+        tmux send-keys -t "$t" Escape 2>/dev/null || true
+        sleep 0.2
+    fi
     tmux send-keys -t "$t" Enter 2>/dev/null || { echo "$LABEL prompt: send-keys to '$t' failed" >&2; return 6; }
 
     if (( do_wait )); then
@@ -1400,7 +1427,8 @@ Subcommands (identical semantics to the codex wrapper's documentation):
       straight into 'wait'. Default target: this session's main-topic pane.
   wait [--target T|--topic SLUG] [--timeout SECS] [--activity-timeout SECS]
       Block until the turn settles: after a 'prompt', first requires pane
-      activity (else exit 8, stalled), then stability + the profile's idle
+      activity (else exit 8, stalled; also 8 if the prompt is still in the
+      input box behind a completion popup), then stability + the profile's idle
       regex at the pane bottom. Standalone = "is it idle now?". Prints
       "idle" and exits 0; 5 = timeout, 6 = no target, 9 = agent exited.
   read [--target T|--topic SLUG] [--delta] [--lines N]

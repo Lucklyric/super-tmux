@@ -71,6 +71,34 @@ spawn_pane() {
     [ "$status" -eq 5 ]
 }
 
+@test "prompt: a trailing \$mention popup is dismissed so Enter submits" {
+    export CC_CODEX_BIN="$BATS_TEST_DIRNAME/fixtures/mock-codex-popup.sh"
+    spawn_pane
+    sleep 0.5
+    run "$SCRIPT" prompt --wait --timeout 15 'run $sunstack:release.'
+    [ "$status" -eq 0 ]
+    run "$SCRIPT" read
+    [[ "$output" == *'[mock-response] you said: run $sunstack:release.'* ]]
+}
+
+@test "wait: exits 8 while the prompt sits in the input box behind a popup" {
+    export CC_CODEX_BIN="$BATS_TEST_DIRNAME/fixtures/mock-codex-popup.sh"
+    spawn_pane
+    sleep 0.5
+    tmux send-keys -t "$PANE" -l -- 'use $x'
+    run "$SCRIPT" wait --timeout 10
+    [ "$status" -eq 8 ]
+    [[ "$output" == *"still in the input box"* ]]
+}
+
+@test "wait: an animated braille idle line still settles as idle" {
+    export CC_CODEX_BIN="$BATS_TEST_DIRNAME/fixtures/mock-codex-braille.sh"
+    spawn_pane
+    run "$SCRIPT" wait --timeout 10
+    [ "$status" -eq 0 ]
+    [ "$output" = "idle" ]
+}
+
 @test "prompt: exits 6 when no codex pane exists for the topic" {
     run "$SCRIPT" prompt "nobody home"
     [ "$status" -eq 6 ]

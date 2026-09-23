@@ -22,9 +22,10 @@ PROFILE_LOGIN_HINT="claude /login"
 PROFILE_SANDBOX_DEFAULT="read-only"
 PROFILE_APPROVAL_DEFAULT="on-request"
 # First-run gates: theme picker on the very first launch, and a per-directory
-# "Do you trust the files in this folder?" prompt (Enter accepts). Auth gate:
+# "Quick safety check" trust prompt — cursor starts on "No, exit", so Down
+# then Enter accepts (a bare Enter quits). Auth gate:
 # run PROFILE_LOGIN_HINT inside the pane.
-PROFILE_FIRST_RUN_GATE='trust prompt: "Do you trust the files in this folder?" -> Enter'
+PROFILE_FIRST_RUN_GATE='trust prompt: "Quick safety check" -> Down Enter (cursor starts on "No, exit")'
 # Idle/busy calibration. Claude Code's idle footer is USER-CONFIGURABLE
 # (custom statuslines, vim mode indicators), so no positive idle marker is
 # reliable across setups — leave IDLE_REGEX empty (stability-only) and anchor

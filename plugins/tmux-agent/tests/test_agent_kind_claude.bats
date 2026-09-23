@@ -89,3 +89,10 @@ teardown() {
     [ "${lines[0]}" = "$pane" ]
     [[ "$output" == *"Relaunched claude in kept pane"* ]]
 }
+
+@test "claude trust prompt: docs say Down then Enter (a bare Enter picks 'No, exit')" {
+    local root="$BATS_TEST_DIRNAME/.."
+    grep -q 'send `Down`' "$root/skills/claude/SKILL.md"
+    ! grep -q 'send `Enter` to accept' "$root/skills/claude/SKILL.md"
+    grep -q 'Down Enter' "$root/scripts/profiles/claude.sh"
+}

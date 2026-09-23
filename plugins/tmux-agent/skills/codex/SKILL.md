@@ -424,7 +424,7 @@ The helper script fails loudly (non-zero exit + stderr) for lifecycle errors. Wh
 - Window/pane-not-found errors from `ls`, `kill`, `attach`, `rename` — surface the message.
 - v3.1.0 migration errors from `send`/`capture` — exit 64. Use the driving verbs instead.
 
-Interaction failures mostly surface as `wait` exit codes: 5 = still running (wait longer, or `read` to peek — an approval/hooks prompt also looks like this, so check the pane), 8 = stalled (the send never started a turn — re-`prompt`), 9 = codex exited (kept shell — `pane` relaunches). Unexpected TUI prompts still need a `read` + the `handle-interruption` recipe, or escalate to the user.
+Interaction failures mostly surface as `wait` exit codes: 5 = still running (wait longer, or `read` to peek — an approval/hooks prompt also looks like this, so check the pane), 8 = stalled (the send never started a turn, or the text is still in the input box behind a completion popup — `read` the pane, then re-`prompt`), 9 = codex exited (kept shell — `pane` relaunches). Unexpected TUI prompts still need a `read` + the `handle-interruption` recipe, or escalate to the user.
 
 ## Reference index
 
